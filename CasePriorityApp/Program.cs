@@ -1,76 +1,42 @@
+using CasePriorityApp;
+
+// Cases are now built through the constructor, which validates every argument,
+// so a SupportCase can never exist in an invalid state.
 var cases = new List<SupportCase>
 {
-    new SupportCase
-    {
-        CaseNumber = "0001",
-        Subject = "User cannot log in",
-        Severity = 3,
-        IsOpen = true
-    },
-    new SupportCase
-    {
-        CaseNumber = "0002",
-        Subject = "Update email address",
-        Severity = 1,
-        IsOpen = false
-    },
-    new SupportCase
-    {
-        CaseNumber = "0003",
-        Subject = "Payment integration failed",
-        Severity = 5,
-        IsOpen = true
-    },
-    new SupportCase
-    {
-        CaseNumber = "0004",
-        Subject = "VP onboarding blocked",
-        Severity = 2,
-        IsOpen = true,
-        IsExecutiveEscalation = true
-    }
+    new SupportCase("0001", "User cannot log in", severity: 3),
+    new SupportCase("0002", "Update email address", severity: 1, isOpen: false),
+    new SupportCase("0003", "Payment integration failed", severity: 5),
+    new SupportCase("0004", "VP onboarding blocked", severity: 2, isExecutiveEscalation: true)
 };
+
+// Basic exception handling: a bad case is rejected by the constructor and the
+// program keeps running instead of crashing.
+try
+{
+    cases.Add(new SupportCase("0005", "Impossible severity", severity: 9));
+}
+catch (ArgumentOutOfRangeException ex)
+{
+    Console.WriteLine($"Rejected case 0005: {ex.Message}");
+}
+
+// State-changing methods: reopen a closed case and escalate an open one.
+// These go through validated methods, not direct field assignment.
+cases.Single(currentCase => currentCase.CaseNumber == "0002").Reopen();
+cases.Single(currentCase => currentCase.CaseNumber == "0001").Escalate();
 
 var openCases = cases
     .Where(currentCase => currentCase.IsOpen)
     .OrderByDescending(currentCase => currentCase.Severity);
 
+Console.WriteLine();
 Console.WriteLine("Open cases:");
 
 foreach (SupportCase currentCase in openCases)
 {
     Console.WriteLine(
         $"{currentCase.CaseNumber}: {currentCase.Subject} " +
-        $"— Priority: {currentCase.GetPriority()}"
+        $"— Priority: {currentCase.Priority}"
     );
-}
-
-public class SupportCase
-{
-    public string CaseNumber { get; set; } = "";
-    public string Subject { get; set; } = "";
-    public int Severity { get; set; }
-    public bool IsOpen { get; set; }
-    public bool IsExecutiveEscalation { get; set; }
-
-    public string GetPriority()
-    {
-        // An executive escalation is always Critical, regardless of severity.
-        if (IsExecutiveEscalation)
-        {
-            return "Critical";
-        }
-
-        if (Severity >= 5)
-        {
-            return "Critical";
-        }
-
-        if (Severity >= 3)
-        {
-            return "High";
-        }
-
-        return "Normal";
-    }
 }
