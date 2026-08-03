@@ -24,8 +24,10 @@ public class SupportCase
         bool isOpen = true,
         bool isExecutiveEscalation = false)
     {
-        // Constructor validation: an object can never be created in an invalid
-        // state. Fail loudly at construction instead of much later.
+        // Constructor validation: enforce the invariants we choose to encode
+        // (non-blank identity/subject, severity 1-5) up front, so those specific
+        // rules can't be violated later. Only the invariants encoded here are
+        // guaranteed — e.g. a closed-yet-escalated case is still permitted.
         if (string.IsNullOrWhiteSpace(caseNumber))
         {
             throw new ArgumentException("Case number is required.", nameof(caseNumber));
@@ -45,39 +47,48 @@ public class SupportCase
         IsExecutiveEscalation = isExecutiveEscalation;
     }
 
-    /// <summary>Calculated priority. Escalation wins over raw severity.</summary>
-    public CasePriority GetPriority()
+    /// <summary>
+    /// Calculated priority. A computed property (not a method) because it is
+    /// cheap, takes no arguments, has no side effects, and just describes the
+    /// case. Escalation wins over raw severity.
+    /// </summary>
+    public CasePriority Priority
     {
-        if (IsExecutiveEscalation)
+        get
         {
-            return CasePriority.Critical;
-        }
+            if (IsExecutiveEscalation)
+            {
+                return CasePriority.Critical;
+            }
 
-        if (Severity >= 5)
-        {
-            return CasePriority.Critical;
-        }
+            if (Severity >= 5)
+            {
+                return CasePriority.Critical;
+            }
 
-        if (Severity >= 3)
-        {
-            return CasePriority.High;
-        }
+            if (Severity >= 3)
+            {
+                return CasePriority.High;
+            }
 
-        return CasePriority.Normal;
+            return CasePriority.Normal;
+        }
     }
 
     // ---- State-changing methods ------------------------------------------
-    // Each one guards against an invalid transition, so the object stays valid.
+    // These preserve the object's validation rules and invariants. (Note the
+    // differences: Close/Reopen guard a transition; ChangeSeverity re-validates
+    // an invariant; Escalate has no guard and is idempotent.)
 
     public void Escalate()
     {
         IsExecutiveEscalation = true;
     }
 
-    public void ChangeSeverity(int newSeverity)
+    public void ChangeSeverity(int severity)
     {
-        ValidateSeverity(newSeverity);
-        Severity = newSeverity;
+        ValidateSeverity(severity);
+        Severity = severity;
     }
 
     public void Close()

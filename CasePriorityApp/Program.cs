@@ -37,6 +37,6 @@ foreach (SupportCase currentCase in openCases)
 {
     Console.WriteLine(
         $"{currentCase.CaseNumber}: {currentCase.Subject} " +
-        $"— Priority: {currentCase.GetPriority()}"
+        $"— Priority: {currentCase.Priority}"
     );
 }
