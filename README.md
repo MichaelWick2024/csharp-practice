@@ -1,5 +1,7 @@
 # csharp-practice
 
+[![CI](https://github.com/MichaelWick2024/csharp-practice/actions/workflows/ci.yml/badge.svg)](https://github.com/MichaelWick2024/csharp-practice/actions/workflows/ci.yml)
+
 Hands-on C#/.NET practice as I transfer my Salesforce/Apex development experience to
 C#, ASP.NET Core, and SQL Server. Learning by building, not by watching — each folder
 is a small, runnable project, growing toward a full ASP.NET Core case-management API.
@@ -20,6 +22,17 @@ Run it:
 cd CasePriorityApp
 dotnet run
 ```
+
+## Testing
+
+xUnit tests live in `CasePriorityApp.Tests`. Run the whole solution:
+
+```bash
+dotnet test
+```
+
+Every push and pull request also runs restore → build → test via GitHub Actions
+(`.github/workflows/ci.yml`).
 
 ## Apex → C# quick map
 
