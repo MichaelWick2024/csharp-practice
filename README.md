@@ -31,8 +31,8 @@ xUnit tests live in `CasePriorityApp.Tests`. Run the whole solution:
 dotnet test
 ```
 
-Every push and pull request also runs restore → build → test via GitHub Actions
-(`.github/workflows/ci.yml`).
+Every push to `main` and every pull request targeting `main` also runs
+restore → build → test via GitHub Actions (`.github/workflows/ci.yml`).
 
 ## Apex → C# quick map
 
