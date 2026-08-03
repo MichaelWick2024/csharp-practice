@@ -1,0 +1,14 @@
+## .NET build output
+bin/
+obj/
+*.user
+*.suo
+
+## IDE
+.vs/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+## macOS
+.DS_Store
