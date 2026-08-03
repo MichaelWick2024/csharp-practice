@@ -20,6 +20,14 @@ var cases = new List<SupportCase>
         Subject = "Payment integration failed",
         Severity = 5,
         IsOpen = true
+    },
+    new SupportCase
+    {
+        CaseNumber = "0004",
+        Subject = "VP onboarding blocked",
+        Severity = 2,
+        IsOpen = true,
+        IsExecutiveEscalation = true
     }
 };
 
@@ -43,9 +51,16 @@ public class SupportCase
     public string Subject { get; set; } = "";
     public int Severity { get; set; }
     public bool IsOpen { get; set; }
+    public bool IsExecutiveEscalation { get; set; }
 
     public string GetPriority()
     {
+        // An executive escalation is always Critical, regardless of severity.
+        if (IsExecutiveEscalation)
+        {
+            return "Critical";
+        }
+
         if (Severity >= 5)
         {
             return "Critical";
