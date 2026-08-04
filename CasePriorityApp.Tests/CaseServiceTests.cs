@@ -1,6 +1,7 @@
 using CasePriority.Core.Domain;
 using CasePriority.Core.Repositories;
 using CasePriority.Core.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CasePriorityApp.Tests;
 
@@ -10,7 +11,7 @@ public class CaseServiceTests
     private static CaseService NewService(out InMemoryCaseRepository repository)
     {
         repository = new InMemoryCaseRepository();
-        return new CaseService(repository, repository);
+        return new CaseService(repository, repository, NullLogger<CaseService>.Instance);
     }
 
     // ---- Construction / DI ------------------------------------------------
@@ -19,21 +20,30 @@ public class CaseServiceTests
     public void Constructor_NullRepository_Throws()
     {
         var repository = new InMemoryCaseRepository();
-        Assert.Throws<ArgumentNullException>(() => new CaseService(null!, repository));
+        Assert.Throws<ArgumentNullException>(
+            () => new CaseService(null!, repository, NullLogger<CaseService>.Instance));
     }
 
     [Fact]
     public void Constructor_NullUnitOfWork_Throws()
     {
         var repository = new InMemoryCaseRepository();
-        Assert.Throws<ArgumentNullException>(() => new CaseService(repository, null!));
+        Assert.Throws<ArgumentNullException>(
+            () => new CaseService(repository, null!, NullLogger<CaseService>.Instance));
+    }
+
+    [Fact]
+    public void Constructor_NullLogger_Throws()
+    {
+        var repository = new InMemoryCaseRepository();
+        Assert.Throws<ArgumentNullException>(() => new CaseService(repository, repository, null!));
     }
 
     [Fact]
     public async Task CreateCase_ReturnsVersion1Snapshot_AndSaves()
     {
         var repository = new RecordingCaseRepository();
-        var service = new CaseService(repository, repository);
+        var service = new CaseService(repository, repository, NullLogger<CaseService>.Instance);
 
         var created = await service.CreateCaseAsync("0001", "Login broken", severity: 3);
 

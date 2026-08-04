@@ -1,11 +1,13 @@
 using CasePriority.Core.Domain;
 using CasePriority.Core.Repositories;
 using CasePriority.Core.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 
 // Composition root: the one place that picks and wires the concrete
-// dependencies. The in-memory repository is both the store and the unit of work.
+// dependencies. The in-memory repository is both the store and the unit of work;
+// structured logging is a hosted-API concern, so the console uses a null logger.
 var repository = new InMemoryCaseRepository();
-var caseService = new CaseService(repository, repository);
+var caseService = new CaseService(repository, repository, NullLogger<CaseService>.Instance);
 
 await caseService.CreateCaseAsync("0001", "User cannot log in", severity: 3);
 await caseService.CreateCaseAsync("0002", "Update email address", severity: 1);

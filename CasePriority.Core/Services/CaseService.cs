@@ -1,5 +1,6 @@
 using CasePriority.Core.Domain;
 using CasePriority.Core.Repositories;
+using Microsoft.Extensions.Logging;
 
 namespace CasePriority.Core.Services;
 
@@ -14,14 +15,17 @@ public class CaseService
 {
     private readonly ICaseRepository _repository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<CaseService> _logger;
 
-    public CaseService(ICaseRepository repository, IUnitOfWork unitOfWork)
+    public CaseService(ICaseRepository repository, IUnitOfWork unitOfWork, ILogger<CaseService> logger)
     {
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(unitOfWork);
+        ArgumentNullException.ThrowIfNull(logger);
 
         _repository = repository;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     /// <summary>
@@ -37,7 +41,10 @@ public class CaseService
         var supportCase = new SupportCase(caseNumber, subject, severity);
         _repository.Add(supportCase);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return supportCase.ToSnapshot();
+
+        var snapshot = supportCase.ToSnapshot();
+        CaseServiceLog.CaseCreated(_logger, snapshot.CaseNumber, snapshot.Severity, snapshot.Version);
+        return snapshot;
     }
 
     public async Task<IReadOnlyList<SupportCaseSnapshot>> GetAllCasesAsync(
@@ -82,6 +89,8 @@ public class CaseService
         var supportCase = await GetRequiredCaseAsync(caseNumber, cancellationToken);
         var snapshot = supportCase.Close(expectedVersion);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        CaseServiceLog.CaseClosed(_logger, snapshot.CaseNumber, snapshot.Version);
         return snapshot;
     }
 
@@ -91,6 +100,8 @@ public class CaseService
         var supportCase = await GetRequiredCaseAsync(caseNumber, cancellationToken);
         var snapshot = supportCase.Reopen(expectedVersion);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        CaseServiceLog.CaseReopened(_logger, snapshot.CaseNumber, snapshot.Version);
         return snapshot;
     }
 
@@ -100,6 +111,18 @@ public class CaseService
         var supportCase = await GetRequiredCaseAsync(caseNumber, cancellationToken);
         var snapshot = supportCase.Escalate(expectedVersion);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Version unchanged from what the client sent => the case was already
+        // escalated (a no-op) — log that at Debug, not as a state change.
+        if (snapshot.Version == expectedVersion)
+        {
+            CaseServiceLog.EscalationNoOp(_logger, snapshot.CaseNumber, snapshot.Version);
+        }
+        else
+        {
+            CaseServiceLog.CaseEscalated(_logger, snapshot.CaseNumber, snapshot.Version);
+        }
+
         return snapshot;
     }
 
@@ -109,6 +132,16 @@ public class CaseService
         var supportCase = await GetRequiredCaseAsync(caseNumber, cancellationToken);
         var snapshot = supportCase.ChangeSeverity(severity, expectedVersion);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (snapshot.Version == expectedVersion)
+        {
+            CaseServiceLog.SeverityNoOp(_logger, snapshot.CaseNumber, snapshot.Severity, snapshot.Version);
+        }
+        else
+        {
+            CaseServiceLog.SeverityChanged(_logger, snapshot.CaseNumber, snapshot.Severity, snapshot.Version);
+        }
+
         return snapshot;
     }
 

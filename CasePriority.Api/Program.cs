@@ -1,14 +1,31 @@
 using System.Text.Json.Serialization;
+using CasePriority.Api.Configuration;
 using CasePriority.Api.ErrorHandling;
+using CasePriority.Api.Health;
+using CasePriority.Api.Middleware;
 using CasePriority.Core.Domain;
 using CasePriority.Core.Repositories;
 using CasePriority.Core.Services;
+using CasePriority.Infrastructure.Health;
 using CasePriority.Infrastructure.Persistence;
 using CasePriority.Infrastructure.Repositories;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Request-tracing settings, validated at startup so bad config stops the app.
+builder.Services
+    .AddOptionsWithValidateOnStart<RequestTracingOptions>()
+    .Bind(builder.Configuration.GetSection(RequestTracingOptions.SectionName))
+    .Validate(
+        options => !string.IsNullOrWhiteSpace(options.HeaderName),
+        "RequestTracing:HeaderName is required.")
+    .Validate(
+        options => options.MaxLength is >= 16 and <= 128,
+        "RequestTracing:MaxLength must be between 16 and 128.");
 
 builder.Services
     .AddControllers()
@@ -42,7 +59,14 @@ builder.Services.AddOpenApi(options =>
         return Task.CompletedTask;
     });
 });
-builder.Services.AddProblemDetails();
+builder.Services.AddProblemDetails(options =>
+{
+    // Make every Problem Details' traceId the request's correlation ID
+    // (CorrelationIdMiddleware sets TraceIdentifier), so a caller can quote one
+    // value that also appears in the logs.
+    options.CustomizeProblemDetails = context =>
+        context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+});
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
 // EF Core / SQL Server persistence. Fail fast if the connection string is
@@ -65,8 +89,18 @@ builder.Services.AddScoped<ICaseRepository>(sp => sp.GetRequiredService<EfCaseRe
 builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<EfCaseRepository>());
 builder.Services.AddScoped<CaseService>();
 
+// Readiness health check: real SQL Server connectivity (tagged "ready").
+builder.Services
+    .AddHealthChecks()
+    .AddCheck<SqlServerHealthCheck>(
+        name: "sqlserver",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: ["ready"]);
+
 var app = builder.Build();
 
+// Correlation ID first, so every downstream log and error shares it.
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
@@ -74,6 +108,20 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+
+// Liveness: is the process up? (no dependency checks). Readiness: can we serve
+// the real workload? (SQL Server connectivity).
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false,
+    ResponseWriter = HealthResponseWriter.WriteAsync
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("ready"),
+    ResponseWriter = HealthResponseWriter.WriteAsync
+});
 
 app.MapControllers();
 
