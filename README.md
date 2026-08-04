@@ -4,7 +4,8 @@
 
 Hands-on C#/.NET practice as I transfer my Salesforce/Apex development experience to
 C#, ASP.NET Core, and SQL Server. Learning by building, not by watching — each folder
-is a small, runnable project, growing toward a full ASP.NET Core case-management API.
+is a small, runnable project that grew into a full ASP.NET Core case-management API
+fronted by a Razor Pages web portal.
 
 ## Projects
 
@@ -13,9 +14,11 @@ is a small, runnable project, growing toward a full ASP.NET Core case-management
 | **`CasePriority.Core`** | class library | Reusable domain, repository/unit-of-work contracts, service — no EF dependency |
 | **`CasePriority.Infrastructure`** | class library | EF Core: `DbContext`, mapping, `EfCaseRepository`, migrations (SQL Server) |
 | **`CasePriority.Api`** | ASP.NET Core Web API | Controller-based HTTP API over the Core service |
+| **`CasePriority.Web`** | ASP.NET Core Razor Pages | Case-management portal — a **backend-for-frontend** that calls the API over HTTP; holds no domain code |
 | **`CasePriorityApp`** | console app | Composition root that demonstrates Core (in-memory) as a console program |
 | **`CasePriorityApp.Tests`** | xUnit | Unit tests for the domain, repository, and service (in-memory) |
 | **`CasePriority.Api.Tests`** | xUnit | API tests via `WebApplicationFactory` (in-memory swap) + SQL-backed E2E (CI) |
+| **`CasePriority.Web.Tests`** | xUnit | Portal tests via `WebApplicationFactory` with a fake `HttpMessageHandler` (no SQL) |
 | **`CasePriority.Infrastructure.Tests`** | xUnit | Real SQL Server integration tests (mapping, persistence, DB concurrency) — CI |
 
 ## Architecture (Day 7)
@@ -182,12 +185,77 @@ dotnet user-jwts create --project CasePriority.Api --role Administrator --valid-
 curl -i http://localhost:5075/api/cases -H "Authorization: Bearer <TOKEN>"
 ```
 
+## Web portal (Day 10)
+
+`CasePriority.Web` is a Razor Pages + Bootstrap + small-jQuery portal built as a
+**backend-for-frontend (BFF)**. The browser gets a cookie session; the **API bearer
+token never leaves the server** — the web app attaches it to server-side
+`HttpClient` calls. `CasePriority.Web` has **no project reference** to Core,
+Infrastructure, or Api: it is a genuine external HTTP client with its own DTOs, and
+the API stays the sole authority on the rules.
+
+```
+browser ──cookie session──▶  CasePriority.Web (Razor Pages, BFF)
+                                   │  server-held JWT per role, never sent to the browser
+                                   │  ApiBearerTokenHandler adds Bearer + X-Correlation-ID
+                                   ▼
+                             CasePriority.Api  ──▶  Core ──▶ SQL Server
+```
+
+- **Dev-only cookie login** — `/Account/DevLogin` takes an access code + a role
+  (Viewer / CaseManager / Administrator) and issues an auth cookie holding **only**
+  name and role claims — never a token. The role selects which server-held API
+  token is used. Startup **throws** if the app runs outside Development or Testing,
+  so this shortcut can't ship to production.
+- **Token isolation** — tokens live in user-secrets, are resolved per request from
+  the signed-in role, and appear in no cookie, HTML, log, or browser storage. Tests
+  assert they never surface in rendered HTML.
+- **Preserved API rules** — Viewers get a read-only UI (no manage buttons, and the
+  create page redirects to *Access denied*); Managers/Admins can create, close,
+  reopen, escalate, and change severity. The API remains final: a forbidden call
+  still 403s server-side.
+- **Optimistic concurrency, end to end** — the details page round-trips the exact
+  `ETag`; a stale update (**412**) shows a "reloaded, try again" message, an invalid
+  transition (**409**) and an expired token (**401**) show friendly messages, and an
+  unreachable API degrades to a "service unavailable" notice instead of an error page.
+- **Correlation IDs** propagate: the portal forwards its request id as
+  `X-Correlation-ID` on every API call, so one id ties the browser request to the
+  API logs.
+
+### Run the portal
+
+```bash
+# 1. Point the portal at a running API (appsettings has a dev default):
+#    CaseApi:BaseAddress = https://localhost:7075
+
+# 2. Provide the per-role API tokens + the dev access code via user-secrets
+#    (never committed). Generate tokens with the API's user-jwts:
+dotnet user-secrets --project CasePriority.Web set "CaseApi:ViewerToken" \
+  "$(dotnet user-jwts create --project CasePriority.Api --role Viewer --valid-for 8h --output token)"
+dotnet user-secrets --project CasePriority.Web set "CaseApi:CaseManagerToken" \
+  "$(dotnet user-jwts create --project CasePriority.Api --role CaseManager --valid-for 8h --output token)"
+dotnet user-secrets --project CasePriority.Web set "CaseApi:AdministratorToken" \
+  "$(dotnet user-jwts create --project CasePriority.Api --role Administrator --valid-for 8h --output token)"
+dotnet user-secrets --project CasePriority.Web set "DevelopmentLogin:AccessCode" "<your-access-code>"
+
+# 3. Run both (separate terminals):
+dotnet run --project CasePriority.Api
+dotnet run --project CasePriority.Web        # sign in at /Account/DevLogin
+```
+
+> The dev login is a local learning shortcut, not authentication. A real portal
+> would sign users in against the same OIDC/OAuth provider as the API and exchange
+> the user's identity for a downstream token — never keep per-role tokens on the server.
+
 ## Testing
 
 Two intentional layers:
 
-- **Fast, DB-free (local + CI):** unit tests, and API tests that boot the real
-  app but swap EF for a shared in-memory repository (`InMemoryApiFactory`).
+- **Fast, DB-free (local + CI):** unit tests; API tests that boot the real app but
+  swap EF for a shared in-memory repository (`InMemoryApiFactory`); and portal tests
+  that boot `CasePriority.Web` and replace the outgoing API network handler with a
+  fake `HttpMessageHandler` (`WebTestFactory`) — real cookie login, antiforgery, and
+  error mapping, no SQL and no live API.
 - **Real SQL Server (CI only):** `CasePriority.Infrastructure.Tests` (mapping,
   cross-scope persistence, case-insensitive keys, unique-constraint handling,
   two-`DbContext` database concurrency) and a few SQL-backed API E2E tests
@@ -201,6 +269,10 @@ Two intentional layers:
 - **`CasePriority.Api.Tests`** — integration tests that boot the API in-memory with
   `WebApplicationFactory` and exercise routing, model binding, DI, serialization,
   middleware, and HTTP status codes end to end.
+- **`CasePriority.Web.Tests`** — portal tests: config validation, dev-login
+  availability/guarding, role-gated pages, ETag round-trip, error mapping
+  (401/403/409/412/unreachable), antiforgery, and token isolation — all against a
+  fake API handler.
 
 Run the whole solution:
 

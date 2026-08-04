@@ -1,0 +1,75 @@
+@page "{caseNumber}"
+@model CasePriority.Web.Pages.Cases.DetailsModel
+@{
+    ViewData["Title"] = $"Case {Model.CaseNumber}";
+}
+
+<h1 class="h3 mb-3">Case @Model.CaseNumber</h1>
+
+@if (Model.ErrorMessage is not null)
+{
+    <div class="alert alert-warning" role="alert">@Model.ErrorMessage</div>
+}
+
+@if (Model.Case is { } c)
+{
+    <dl class="row">
+        <dt class="col-sm-3">Subject</dt><dd class="col-sm-9">@c.Subject</dd>
+        <dt class="col-sm-3">Severity</dt><dd class="col-sm-9">@c.Severity</dd>
+        <dt class="col-sm-3">Priority</dt><dd class="col-sm-9">@c.Priority</dd>
+        <dt class="col-sm-3">Status</dt><dd class="col-sm-9">@(c.IsOpen ? "Open" : "Closed")</dd>
+        <dt class="col-sm-3">Escalated</dt><dd class="col-sm-9">@(c.IsExecutiveEscalation ? "Yes" : "No")</dd>
+        <dt class="col-sm-3">Version</dt><dd class="col-sm-9">@c.Version</dd>
+        <dt class="col-sm-3">ETag</dt><dd class="col-sm-9"><code>@Model.EntityTag</code></dd>
+    </dl>
+
+    @if (Model.CanManage)
+    {
+        <div class="card mt-3">
+            <div class="card-body">
+                <h2 class="h5">Manage</h2>
+                <div class="d-flex flex-wrap gap-2 align-items-start">
+                    @if (c.IsOpen)
+                    {
+                        <form method="post" asp-page-handler="Close">
+                            <input type="hidden" asp-for="CaseNumber" />
+                            <input type="hidden" asp-for="EntityTag" />
+                            <button type="submit" class="btn btn-outline-dark">Close</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <form method="post" asp-page-handler="Reopen">
+                            <input type="hidden" asp-for="CaseNumber" />
+                            <input type="hidden" asp-for="EntityTag" />
+                            <button type="submit" class="btn btn-outline-success">Reopen</button>
+                        </form>
+                    }
+
+                    <form method="post" asp-page-handler="Escalate">
+                        <input type="hidden" asp-for="CaseNumber" />
+                        <input type="hidden" asp-for="EntityTag" />
+                        <button type="submit" class="btn btn-outline-danger">Escalate</button>
+                    </form>
+
+                    <form method="post" asp-page-handler="ChangeSeverity" class="d-flex gap-2 align-items-start">
+                        <input type="hidden" asp-for="CaseNumber" />
+                        <input type="hidden" asp-for="EntityTag" />
+                        <label asp-for="NewSeverity" class="form-label mb-0 pt-1">Severity</label>
+                        <div>
+                            <input asp-for="NewSeverity" type="number" min="1" max="5" class="form-control" style="width: 5rem;" />
+                            <span asp-validation-for="NewSeverity" class="text-danger small"></span>
+                        </div>
+                        <button type="submit" class="btn btn-outline-primary">Change</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+<a class="btn btn-link mt-3 px-0" asp-page="/Cases/Index">Back to cases</a>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
