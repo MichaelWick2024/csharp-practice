@@ -79,6 +79,15 @@ public sealed class CorrelationIdTests : IClassFixture<InMemoryApiFactory>
     }
 
     [Fact]
+    public async Task UnicodeValue_IsReplaced()
+    {
+        // 'é' is a Unicode letter but not ASCII — must be rejected/replaced.
+        var response = await SendGetAll((Header, "café-123"));
+        Assert.NotEqual("café-123", CorrelationOf(response));
+        Assert.Equal(32, CorrelationOf(response)!.Length);
+    }
+
+    [Fact]
     public async Task ErrorProblemDetails_TraceId_MatchesHeader()
     {
         var request = new HttpRequestMessage(

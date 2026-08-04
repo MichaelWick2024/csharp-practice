@@ -60,9 +60,11 @@ public sealed class CorrelationIdMiddleware
 
     private bool IsValid(string? value)
     {
+        // ASCII-only so the accepted format stays predictable across clients,
+        // proxies, and log systems (IsAsciiLetterOrDigit, not the Unicode test).
         return !string.IsNullOrWhiteSpace(value)
             && value.Length <= _options.MaxLength
             && value.All(character =>
-                char.IsLetterOrDigit(character) || character is '-' or '_' or '.' or ':');
+                char.IsAsciiLetterOrDigit(character) || character is '-' or '_' or '.' or ':');
     }
 }

@@ -37,9 +37,12 @@ public sealed class RequestTracingOptionsValidationTests : IClassFixture<InMemor
     }
 
     [Theory]
-    [InlineData("", "64")]      // blank header name
-    [InlineData("X-Id", "8")]   // MaxLength below 16
-    [InlineData("X-Id", "200")] // MaxLength above 128
+    [InlineData("", "64")]                 // blank header name
+    [InlineData("Bad Header", "64")]       // space (not a token char)
+    [InlineData("1-Correlation-ID", "64")] // leading digit
+    [InlineData("X_Correlation_ID", "64")] // underscore
+    [InlineData("X-Id", "8")]              // MaxLength below 16
+    [InlineData("X-Id", "200")]            // MaxLength above 128
     public void InvalidOptions_FailStartup(string headerName, string maxLength)
     {
         using var factory = WithTracing(headerName, maxLength);

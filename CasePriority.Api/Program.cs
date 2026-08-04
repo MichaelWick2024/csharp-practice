@@ -21,8 +21,8 @@ builder.Services
     .AddOptionsWithValidateOnStart<RequestTracingOptions>()
     .Bind(builder.Configuration.GetSection(RequestTracingOptions.SectionName))
     .Validate(
-        options => !string.IsNullOrWhiteSpace(options.HeaderName),
-        "RequestTracing:HeaderName is required.")
+        options => IsValidHeaderName(options.HeaderName),
+        "RequestTracing:HeaderName must be a valid HTTP header name.")
     .Validate(
         options => options.MaxLength is >= 16 and <= 128,
         "RequestTracing:MaxLength must be between 16 and 128.");
@@ -95,7 +95,8 @@ builder.Services
     .AddCheck<SqlServerHealthCheck>(
         name: "sqlserver",
         failureStatus: HealthStatus.Unhealthy,
-        tags: ["ready"]);
+        tags: ["ready"],
+        timeout: TimeSpan.FromSeconds(5)); // bounded so readiness never hangs
 
 var app = builder.Build();
 
@@ -126,3 +127,13 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 app.MapControllers();
 
 app.Run();
+
+// Interoperable HTTP field-name check (RFC 9110 recommendation for new fields):
+// begins with a letter, then letters/digits/'-'/'.'. Rejects spaces, leading
+// digits, and underscores at startup rather than failing later per request.
+static bool IsValidHeaderName(string? value)
+{
+    return !string.IsNullOrWhiteSpace(value)
+        && char.IsAsciiLetter(value[0])
+        && value.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '.');
+}
