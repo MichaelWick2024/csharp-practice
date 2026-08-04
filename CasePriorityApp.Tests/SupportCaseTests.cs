@@ -1,4 +1,7 @@
-using CasePriorityApp;
+using CasePriority.Core.Domain;
+// The CasePriority enum shares its name with the CasePriority root namespace,
+// so a bare `CasePriority` resolves to the namespace here. Alias it.
+using Priority = CasePriority.Core.Domain.CasePriority;
 
 namespace CasePriorityApp.Tests;
 
@@ -63,12 +66,12 @@ public class SupportCaseTests
     // ---- Priority thresholds ---------------------------------------------
 
     [Theory]
-    [InlineData(1, CasePriority.Normal)]
-    [InlineData(2, CasePriority.Normal)]
-    [InlineData(3, CasePriority.High)]
-    [InlineData(4, CasePriority.High)]
-    [InlineData(5, CasePriority.Critical)]
-    public void Priority_FollowsSeverityThresholds(int severity, CasePriority expected)
+    [InlineData(1, Priority.Normal)]
+    [InlineData(2, Priority.Normal)]
+    [InlineData(3, Priority.High)]
+    [InlineData(4, Priority.High)]
+    [InlineData(5, Priority.Critical)]
+    public void Priority_FollowsSeverityThresholds(int severity, Priority expected)
     {
         Assert.Equal(expected, NewCase(severity: severity).Priority);
     }
@@ -77,7 +80,7 @@ public class SupportCaseTests
     public void Priority_ExecutiveEscalation_OverridesLowSeverity()
     {
         var c = NewCase(severity: 1, isExecutiveEscalation: true);
-        Assert.Equal(CasePriority.Critical, c.Priority);
+        Assert.Equal(Priority.Critical, c.Priority);
     }
 
     // ---- ChangeSeverity ---------------------------------------------------
@@ -89,7 +92,7 @@ public class SupportCaseTests
         c.ChangeSeverity(5);
 
         Assert.Equal(5, c.Severity);
-        Assert.Equal(CasePriority.Critical, c.Priority);
+        Assert.Equal(Priority.Critical, c.Priority);
     }
 
     [Theory]
@@ -109,7 +112,7 @@ public class SupportCaseTests
         Assert.Throws<ArgumentOutOfRangeException>(() => c.ChangeSeverity(9));
 
         Assert.Equal(3, c.Severity);              // unchanged
-        Assert.Equal(CasePriority.High, c.Priority);
+        Assert.Equal(Priority.High, c.Priority);
     }
 
     // ---- Close / Reopen ---------------------------------------------------
@@ -156,7 +159,7 @@ public class SupportCaseTests
         c.Escalate();
 
         Assert.True(c.IsExecutiveEscalation);
-        Assert.Equal(CasePriority.Critical, c.Priority);
+        Assert.Equal(Priority.Critical, c.Priority);
     }
 
     [Fact]
@@ -167,6 +170,6 @@ public class SupportCaseTests
         c.Escalate();   // repeated call must not throw
 
         Assert.True(c.IsExecutiveEscalation);
-        Assert.Equal(CasePriority.Critical, c.Priority);
+        Assert.Equal(Priority.Critical, c.Priority);
     }
 }

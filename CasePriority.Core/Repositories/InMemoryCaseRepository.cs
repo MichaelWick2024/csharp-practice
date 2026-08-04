@@ -1,26 +1,30 @@
-namespace CasePriorityApp.Repositories;
+using System.Collections.Concurrent;
+using CasePriority.Core.Domain;
+
+namespace CasePriority.Core.Repositories;
 
 /// <summary>
-/// In-memory case storage keyed by case number. A dictionary fits because
-/// cases are looked up by their unique case number. Case numbers are treated
-/// case-insensitively (the dictionary uses an ordinal-ignore-case comparer).
+/// In-memory case storage keyed by case number. Uses a
+/// <see cref="ConcurrentDictionary{TKey,TValue}"/> so it is safe to register as
+/// a singleton and share across concurrent web requests. Case numbers are
+/// treated case-insensitively (ordinal-ignore-case comparer).
 /// </summary>
 public class InMemoryCaseRepository : ICaseRepository
 {
-    private readonly Dictionary<string, SupportCase> _cases =
+    private readonly ConcurrentDictionary<string, SupportCase> _cases =
         new(StringComparer.OrdinalIgnoreCase);
 
     public void Add(SupportCase supportCase)
     {
         ArgumentNullException.ThrowIfNull(supportCase);
 
-        if (_cases.ContainsKey(supportCase.CaseNumber))
+        // TryAdd is atomic: even if two requests race to add the same case
+        // number, exactly one succeeds and the other is rejected.
+        if (!_cases.TryAdd(supportCase.CaseNumber, supportCase))
         {
             throw new InvalidOperationException(
                 $"Case {supportCase.CaseNumber} already exists.");
         }
-
-        _cases.Add(supportCase.CaseNumber, supportCase);
     }
 
     public SupportCase? GetByCaseNumber(string caseNumber)
@@ -37,8 +41,8 @@ public class InMemoryCaseRepository : ICaseRepository
 
     public IReadOnlyList<SupportCase> GetAll()
     {
-        // Return a new list, not the live Values view, so callers can't alter
-        // the repository's internal collection through the returned reference.
+        // A fresh list, so callers can't alter the repository's collection and
+        // later additions don't appear in an earlier snapshot.
         return _cases.Values.ToList();
     }
 }

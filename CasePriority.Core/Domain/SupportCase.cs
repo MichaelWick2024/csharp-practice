@@ -1,4 +1,4 @@
-namespace CasePriorityApp;
+namespace CasePriority.Core.Domain;
 
 /// <summary>
 /// A support case. State is encapsulated: identity is immutable, and every

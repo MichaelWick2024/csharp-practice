@@ -1,4 +1,4 @@
-namespace CasePriorityApp;
+namespace CasePriority.Core.Domain;
 
 /// <summary>
 /// The calculated priority of a support case. Returning an enum instead of a

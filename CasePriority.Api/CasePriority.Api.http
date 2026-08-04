@@ -1,0 +1,29 @@
+@host = http://localhost:5075
+
+### Get all cases
+GET {{host}}/api/cases
+Accept: application/json
+
+### Create a case
+POST {{host}}/api/cases
+Content-Type: application/json
+
+{
+  "caseNumber": "WEB-0001",
+  "subject": "User cannot access the portal",
+  "severity": 3
+}
+
+### Retrieve one case
+GET {{host}}/api/cases/WEB-0001
+Accept: application/json
+
+### Invalid request (severity out of range -> 400)
+POST {{host}}/api/cases
+Content-Type: application/json
+
+{
+  "caseNumber": "WEB-0002",
+  "subject": "Invalid severity example",
+  "severity": 9
+}
