@@ -1,7 +1,29 @@
 @host = http://localhost:5075
 
-### Create
+# Generate tokens with (stored in user-secrets, never committed):
+#   dotnet user-jwts create --project CasePriority.Api --role CaseManager --valid-for 1h
+#   dotnet user-jwts create --project CasePriority.Api --role Viewer     --valid-for 1h
+@token = PASTE_CASE_MANAGER_TOKEN_HERE
+@viewerToken = PASTE_VIEWER_TOKEN_HERE
+
+### No token — should return 401 Unauthorized + WWW-Authenticate: Bearer
+GET {{host}}/api/cases
+Accept: application/json
+
+### Viewer attempting to create — should return 403 Forbidden
 POST {{host}}/api/cases
+Authorization: Bearer {{viewerToken}}
+Content-Type: application/json
+
+{
+  "caseNumber": "WEB-0001",
+  "subject": "Authorization test",
+  "severity": 3
+}
+
+### Create (CaseManager)
+POST {{host}}/api/cases
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -12,22 +34,27 @@ Content-Type: application/json
 
 ### Retrieve current state and ETag
 GET {{host}}/api/cases/WEB-0001
+Authorization: Bearer {{token}}
 Accept: application/json
 
 ### Close version 1
 PATCH {{host}}/api/cases/WEB-0001/close
+Authorization: Bearer {{token}}
 If-Match: "1"
 
 ### Stale update — should return 412 Precondition Failed
 PATCH {{host}}/api/cases/WEB-0001/escalate
+Authorization: Bearer {{token}}
 If-Match: "1"
 
 ### Reopen current version 2
 PATCH {{host}}/api/cases/WEB-0001/reopen
+Authorization: Bearer {{token}}
 If-Match: "2"
 
 ### Change severity at version 3
 PATCH {{host}}/api/cases/WEB-0001/severity
+Authorization: Bearer {{token}}
 If-Match: "3"
 Content-Type: application/json
 
@@ -37,3 +64,4 @@ Content-Type: application/json
 
 ### Missing If-Match — should return 428 Precondition Required
 PATCH {{host}}/api/cases/WEB-0001/escalate
+Authorization: Bearer {{token}}

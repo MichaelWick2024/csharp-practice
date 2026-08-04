@@ -22,20 +22,6 @@ internal static class TestJwtTokens
     public static readonly SymmetricSecurityKey SigningKey =
         new(Encoding.UTF8.GetBytes("test-only-signing-key-at-least-32-bytes"));
 
-    public static TokenValidationParameters ValidationParameters => new()
-    {
-        ValidateIssuer = true,
-        ValidIssuer = Issuer,
-        ValidateAudience = true,
-        ValidAudience = Audience,
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = SigningKey,
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.Zero,
-        NameClaimType = "name",
-        RoleClaimType = "role",
-    };
-
     public static string Create(
         IEnumerable<string>? roles = null,
         DateTime? expires = null,
@@ -78,15 +64,26 @@ internal static class TestJwtTokens
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    /// <summary>Points the API's JWT bearer handler at the test validation params.</summary>
+    /// <summary>
+    /// Overrides ONLY the issuer/audience/signing-key/lifetime validation to trust
+    /// the test tokens — the claim-mapping policy (MapInboundClaims,
+    /// Name/RoleClaimType) stays exactly what production configured.
+    /// </summary>
     public static void UseTestAuthentication(IServiceCollection services)
     {
         services.PostConfigure<JwtBearerOptions>(
             JwtBearerDefaults.AuthenticationScheme,
             options =>
             {
-                options.MapInboundClaims = false; // keep raw "role"/"name"/"sub"
-                options.TokenValidationParameters = ValidationParameters;
+                var parameters = options.TokenValidationParameters;
+                parameters.ValidateIssuer = true;
+                parameters.ValidIssuer = Issuer;
+                parameters.ValidateAudience = true;
+                parameters.ValidAudience = Audience;
+                parameters.ValidateIssuerSigningKey = true;
+                parameters.IssuerSigningKey = SigningKey;
+                parameters.ValidateLifetime = true;
+                parameters.ClockSkew = TimeSpan.Zero;
             });
     }
 }

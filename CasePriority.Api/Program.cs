@@ -43,7 +43,16 @@ builder.Services
 // configuration (dotnet user-jwts locally) or are overridden by tests.
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options => options.EventsType = typeof(BearerProblemDetailsEvents));
+    .AddJwtBearer(options =>
+    {
+        options.EventsType = typeof(BearerProblemDetailsEvents);
+
+        // Use the token's raw claim names — the declared contract. Tests override
+        // only issuer/audience/signing-key, not this claim-mapping policy.
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters.NameClaimType = "name";
+        options.TokenValidationParameters.RoleClaimType = "role";
+    });
 
 builder.Services.AddScoped<BearerProblemDetailsEvents>();
 

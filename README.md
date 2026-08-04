@@ -80,19 +80,38 @@ Every `PATCH` needs `If-Match: "<version>"`. Missing → **428**, malformed → 
 dotnet run --project CasePriority.Api        # http://localhost:5075
 ```
 
+The API requires a bearer token (all case endpoints are protected). Generate one
+locally (stored in user-secrets, never committed):
+
+```bash
+TOKEN=$(dotnet user-jwts create --project CasePriority.Api --role CaseManager --valid-for 1h --output token)
+```
+
 Then use `CasePriority.Api/CasePriority.Api.http`, or:
 
 ```bash
-# Create (returns ETag: "1")
+# No token -> 401 Unauthorized + WWW-Authenticate: Bearer
+curl -i http://localhost:5075/api/cases
+
+# Create (CaseManager, returns ETag: "1")
 curl -i -X POST http://localhost:5075/api/cases \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"caseNumber":"WEB-0001","subject":"User cannot access the portal","severity":3}'
 
 # Close using the current version (returns ETag: "2")
-curl -i -X PATCH http://localhost:5075/api/cases/WEB-0001/close -H 'If-Match: "1"'
+curl -i -X PATCH http://localhost:5075/api/cases/WEB-0001/close \
+  -H "Authorization: Bearer $TOKEN" -H 'If-Match: "1"'
 
 # Re-using the stale version now returns 412 Precondition Failed
-curl -i -X PATCH http://localhost:5075/api/cases/WEB-0001/escalate -H 'If-Match: "1"'
+curl -i -X PATCH http://localhost:5075/api/cases/WEB-0001/escalate \
+  -H "Authorization: Bearer $TOKEN" -H 'If-Match: "1"'
+
+# A Viewer token attempting to create -> 403 Forbidden
+VIEWER=$(dotnet user-jwts create --project CasePriority.Api --role Viewer --valid-for 1h --output token)
+curl -i -X POST http://localhost:5075/api/cases \
+  -H "Authorization: Bearer $VIEWER" -H "Content-Type: application/json" \
+  -d '{"caseNumber":"WEB-0002","subject":"nope","severity":3}'
 ```
 
 ### Run the console demo
