@@ -61,8 +61,11 @@ public sealed class CaseApiClient(HttpClient httpClient)
 
         if (response.IsSuccessStatusCode)
         {
-            // Invalid JSON contract will throw here, which is intentional.
-            var value = await response.Content.ReadFromJsonAsync<T>(Json, cancellationToken);
+            // Invalid JSON — including a literal null body — is a contract violation
+            // and throws, rather than surfacing a success result with a null value.
+            var value = await response.Content.ReadFromJsonAsync<T>(Json, cancellationToken)
+                ?? throw new JsonException(
+                    $"The API returned a null {typeof(T).Name} body for a successful response.");
             return new ApiResult<T>(response.StatusCode, value, Problem: null, entityTag);
         }
 

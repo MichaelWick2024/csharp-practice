@@ -101,6 +101,19 @@ public sealed class CaseApiClientTests
     }
 
     [Fact]
+    public async Task NullSuccessBody_ThrowsJsonException()
+    {
+        var (client, handler) = NewClient();
+        handler.RespondWith(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new System.Net.Http.StringContent("null", System.Text.Encoding.UTF8, "application/json"),
+        });
+
+        await Assert.ThrowsAsync<System.Text.Json.JsonException>(
+            () => client.GetByNumberAsync("WEB-0001", default));
+    }
+
+    [Fact]
     public async Task NetworkFailure_Throws()
     {
         var handler = new FakeApiHandler();

@@ -88,6 +88,27 @@ public sealed class DevLoginTests : IClassFixture<WebTestFactory>
     }
 
     [Fact]
+    public async Task NonLocalReturnUrl_RedirectsToCases()
+    {
+        var client = _factory.CreateWebClient();
+        var page = await client.GetAsync("/Account/DevLogin");
+        var token = WebTestFactory.ExtractAntiforgeryToken(await page.Content.ReadAsStringAsync());
+
+        var form = new Dictionary<string, string>
+        {
+            ["Input.AccessCode"] = WebTestFactory.AccessCode,
+            ["Input.Role"] = "Viewer",
+            ["__RequestVerificationToken"] = token,
+        };
+        var login = await client.PostAsync(
+            "/Account/DevLogin?ReturnUrl=https%3A%2F%2Fexample.com",
+            new FormUrlEncodedContent(form));
+
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+        Assert.Equal("/Cases", login.Headers.Location!.ToString());
+    }
+
+    [Fact]
     public async Task Logout_ClearsSession()
     {
         var client = await _factory.LoginAsync("Viewer");

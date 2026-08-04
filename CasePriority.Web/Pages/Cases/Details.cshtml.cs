@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Net;
 using CasePriority.Web.Api;
 using CasePriority.Web.Api.Contracts;
@@ -18,6 +19,7 @@ public sealed class DetailsModel(CaseApiClient apiClient) : PageModel
     public string EntityTag { get; set; } = string.Empty;
 
     [BindProperty]
+    [Range(1, 5, ErrorMessage = "Severity must be between 1 and 5.")]
     public int NewSeverity { get; set; } = 1;
 
     public CaseDto? Case { get; private set; }
@@ -36,8 +38,18 @@ public sealed class DetailsModel(CaseApiClient apiClient) : PageModel
     public Task<IActionResult> OnPostEscalateAsync(CancellationToken ct) =>
         MutateAsync((number, tag) => apiClient.EscalateAsync(number, tag, ct), ct);
 
-    public Task<IActionResult> OnPostChangeSeverityAsync(CancellationToken ct) =>
-        MutateAsync((number, tag) => apiClient.ChangeSeverityAsync(number, tag, new ChangeSeverityDto(NewSeverity), ct), ct);
+    public async Task<IActionResult> OnPostChangeSeverityAsync(CancellationToken ct)
+    {
+        // A crafted post (e.g. NewSeverity=abc) fails binding and leaves the int at
+        // its default (1); reject it here rather than silently changing the case.
+        if (!ModelState.IsValid)
+        {
+            return await LoadAsync(ct);
+        }
+
+        return await MutateAsync(
+            (number, tag) => apiClient.ChangeSeverityAsync(number, tag, new ChangeSeverityDto(NewSeverity), ct), ct);
+    }
 
     private async Task<IActionResult> LoadAsync(CancellationToken cancellationToken)
     {

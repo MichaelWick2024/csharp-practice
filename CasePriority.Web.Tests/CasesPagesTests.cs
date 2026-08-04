@@ -133,6 +133,23 @@ public sealed class CasesPagesTests : IClassFixture<WebTestFactory>
     }
 
     [Fact]
+    public async Task InvalidSeverity_IsRejected_WithoutMutating()
+    {
+        _factory.Api.RespondWith(_ => ApiResponses.Case("WEB-0001", 4, severity: 4));
+        var client = await _factory.LoginAsync("CaseManager");
+        var token = await Antiforgery(client, "/Cases/Details/WEB-0001");
+
+        // A crafted, non-numeric severity would otherwise bind to the default (1).
+        var response = await client.PostAsync("/Cases/Details/WEB-0001?handler=ChangeSeverity",
+            Form(token, ("CaseNumber", "WEB-0001"), ("EntityTag", "\"4\""), ("NewSeverity", "abc")));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("is not valid", await response.Content.ReadAsStringAsync());
+        // No PATCH was sent; the last call the API saw was the GET reload.
+        Assert.Equal(HttpMethod.Get, _factory.Api.LastRequest!.Method);
+    }
+
+    [Fact]
     public async Task StaleUpdate_ShowsReloadMessage()
     {
         _factory.Api.RespondWith(request =>

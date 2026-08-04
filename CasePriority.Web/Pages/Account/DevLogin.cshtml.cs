@@ -70,6 +70,8 @@ public sealed class DevLoginModel(IOptions<DevelopmentLoginOptions> options) : P
         await HttpContext.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
 
-        return LocalRedirect(ReturnUrl ?? "/Cases");
+        // A non-local ReturnUrl would make LocalRedirect throw; normalize instead.
+        var destination = Url.IsLocalUrl(ReturnUrl) ? ReturnUrl! : "/Cases";
+        return LocalRedirect(destination);
     }
 }
