@@ -22,6 +22,17 @@ public sealed class ApiExceptionHandler(
         Exception exception,
         CancellationToken cancellationToken)
     {
+        // The client disconnected / aborted the request. Not a server error, and
+        // there's no point writing a response to a gone connection.
+        if (exception is OperationCanceledException && httpContext.RequestAborted.IsCancellationRequested)
+        {
+            logger.LogDebug(
+                "Request canceled for {Method} {Path}",
+                httpContext.Request.Method,
+                httpContext.Request.Path);
+            return true;
+        }
+
         var (statusCode, title) = exception switch
         {
             PreconditionRequiredException =>

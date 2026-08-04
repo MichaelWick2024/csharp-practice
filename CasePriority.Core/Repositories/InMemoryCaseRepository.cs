@@ -4,12 +4,13 @@ using CasePriority.Core.Domain;
 namespace CasePriority.Core.Repositories;
 
 /// <summary>
-/// In-memory case storage keyed by case number. Uses a
-/// <see cref="ConcurrentDictionary{TKey,TValue}"/> so it is safe to register as
-/// a singleton and share across concurrent web requests. Case numbers are
-/// treated case-insensitively (ordinal-ignore-case comparer).
+/// In-memory case storage keyed by case number. Backs the console app and the
+/// unit/API tests. Implements both <see cref="ICaseRepository"/> and
+/// <see cref="IUnitOfWork"/> — its writes are immediate (they mutate the stored
+/// objects), so <see cref="SaveChangesAsync"/> is a no-op. Uses a
+/// <see cref="ConcurrentDictionary{TKey,TValue}"/> so it is safe to share.
 /// </summary>
-public class InMemoryCaseRepository : ICaseRepository
+public sealed class InMemoryCaseRepository : ICaseRepository, IUnitOfWork
 {
     private readonly ConcurrentDictionary<string, SupportCase> _cases =
         new(StringComparer.OrdinalIgnoreCase);
@@ -18,7 +19,7 @@ public class InMemoryCaseRepository : ICaseRepository
     {
         ArgumentNullException.ThrowIfNull(supportCase);
 
-        // TryAdd is atomic: even if two requests race to add the same case
+        // TryAdd is atomic: even if two callers race to add the same case
         // number, exactly one succeeds and the other is rejected.
         if (!_cases.TryAdd(supportCase.CaseNumber, supportCase))
         {
@@ -27,7 +28,29 @@ public class InMemoryCaseRepository : ICaseRepository
         }
     }
 
-    public SupportCase? GetByCaseNumber(string caseNumber)
+    public Task<IReadOnlyList<SupportCase>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        IReadOnlyList<SupportCase> snapshot = _cases.Values.ToList();
+        return Task.FromResult(snapshot);
+    }
+
+    public Task<SupportCase?> GetByCaseNumberAsync(string caseNumber, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetByCaseNumberInternal(caseNumber));
+    }
+
+    public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // In-memory changes already happened on the stored objects.
+        return Task.CompletedTask;
+    }
+
+    private SupportCase? GetByCaseNumberInternal(string caseNumber)
     {
         if (string.IsNullOrWhiteSpace(caseNumber))
         {
@@ -37,12 +60,5 @@ public class InMemoryCaseRepository : ICaseRepository
         return _cases.TryGetValue(caseNumber, out SupportCase? supportCase)
             ? supportCase
             : null;
-    }
-
-    public IReadOnlyList<SupportCase> GetAll()
-    {
-        // A fresh list, so callers can't alter the repository's collection and
-        // later additions don't appear in an earlier snapshot.
-        return _cases.Values.ToList();
     }
 }

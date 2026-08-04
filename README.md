@@ -10,17 +10,20 @@ is a small, runnable project, growing toward a full ASP.NET Core case-management
 
 | Project | Type | Role |
 |---------|------|------|
-| **`CasePriority.Core`** | class library | Reusable domain, repository, and service — the heart, referenced by everything |
+| **`CasePriority.Core`** | class library | Reusable domain, repository/unit-of-work contracts, service — no EF dependency |
+| **`CasePriority.Infrastructure`** | class library | EF Core: `DbContext`, mapping, `EfCaseRepository`, migrations (SQL Server) |
 | **`CasePriority.Api`** | ASP.NET Core Web API | Controller-based HTTP API over the Core service |
-| **`CasePriorityApp`** | console app | Composition root that demonstrates Core as a console program |
-| **`CasePriorityApp.Tests`** | xUnit | Unit tests for the domain, repository, and service |
-| **`CasePriority.Api.Tests`** | xUnit | Integration tests driving the API through `WebApplicationFactory` |
+| **`CasePriorityApp`** | console app | Composition root that demonstrates Core (in-memory) as a console program |
+| **`CasePriorityApp.Tests`** | xUnit | Unit tests for the domain, repository, and service (in-memory) |
+| **`CasePriority.Api.Tests`** | xUnit | API tests via `WebApplicationFactory` (in-memory swap) + SQL-backed E2E (CI) |
+| **`CasePriority.Infrastructure.Tests`** | xUnit | Real SQL Server integration tests (mapping, persistence, DB concurrency) — CI |
 
-## Architecture (Day 6)
+## Architecture (Day 7)
 
 The domain/repository/service layers live in a reusable class library; the API and
-the console app are two front ends that assemble the same Core the same way. Mutations
-use **optimistic concurrency** — each case has a version, surfaced as an HTTP ETag.
+the console app are two front ends that assemble the same Core. Mutations use
+**optimistic concurrency** — each case has a version, surfaced as an HTTP ETag —
+now enforced at the database via an EF Core concurrency token.
 
 ```
 HTTP If-Match                     console
@@ -31,19 +34,25 @@ CasesController                 Program.cs (composition root)
     └───────────────┬────────────────┘
                     ▼
              CaseService              coordinates use cases; mutations require a version
-                    │
                     ▼
-             ICaseRepository          persistence contract the service depends on
+      ICaseRepository + IUnitOfWork   persistence + commit contracts the service depends on
                     │
-                    ▼
-          InMemoryCaseRepository      ConcurrentDictionary — collection-safe singleton
-                    │
-                    ▼
+        ┌───────────┴─────────────────────────────┐
+        ▼                                          ▼
+  EfCaseRepository → CasePriorityDbContext    InMemoryCaseRepository
+        → SQL Server                          (ConcurrentDictionary)
+     production API                           console + fast tests
+        │                                          │
+        └───────────────┬──────────────────────────┘
+                        ▼
              SupportCase              per-case lock: atomic version-check + mutation + bump
-                    │
-                    ▼
+                        ▼
           SupportCaseSnapshot         immutable view returned by service → CaseResponse + ETag
 ```
+
+> The production API talks to **SQL Server via EF Core** and needs a reachable
+> database + `ConnectionStrings:CasePriority` (see *Persistence* below). The
+> console app and the fast tests use the in-memory repository.
 
 - **`SupportCase`** owns the rules about one case and a per-case `Lock` + `Version`. Every mutation runs the expected-version check, the domain transition, and the version bump **inside one critical section**, then returns an immutable `SupportCaseSnapshot`. The version increments only when the representation actually changes.
 - **`ICaseRepository`** describes persistence operations without a storage mechanism.
@@ -92,7 +101,35 @@ curl -i -X PATCH http://localhost:5075/api/cases/WEB-0001/escalate -H 'If-Match:
 dotnet run --project CasePriorityApp
 ```
 
+## Persistence (Day 7)
+
+Storage is EF Core + SQL Server. `CasePriority.Core` stays EF-free; persistence
+lives in `CasePriority.Infrastructure` behind `ICaseRepository` + `IUnitOfWork`,
+so the service and API contracts don't change. The API registers a **scoped**
+`DbContext` and an `EfCaseRepository` (both interfaces resolve to the same scoped
+instance). Repository/service operations are **async** with cancellation tokens.
+
+The numeric `Version` is mapped as an **application-managed EF concurrency
+token** (not SQL `rowversion`), preserving the existing numeric ETag contract:
+EF puts the original version in the `UPDATE ... WHERE Version = @original`, so a
+stale write updates zero rows → `DbUpdateConcurrencyException`, translated back to
+the same `CaseConcurrencyException` → **412**. Migrations are applied out-of-band
+(CLI/CI), never automatically at startup.
+
 ## Testing
+
+Two intentional layers:
+
+- **Fast, DB-free (local + CI):** unit tests, and API tests that boot the real
+  app but swap EF for a shared in-memory repository (`InMemoryApiFactory`).
+- **Real SQL Server (CI only):** `CasePriority.Infrastructure.Tests` (mapping,
+  cross-scope persistence, case-insensitive keys, unique-constraint handling,
+  two-`DbContext` database concurrency) and a few SQL-backed API E2E tests
+  (POST → restart/new host → GET; competing PATCH). These **skip visibly** when
+  no `ConnectionStrings__CasePriority` is set, so `dotnet test` stays green on a
+  Mac; CI starts an x64 SQL Server service, applies migrations to a clean
+  database, and runs them for real.
+
 
 - **`CasePriorityApp.Tests`** — unit tests for the domain, repository, and service.
 - **`CasePriority.Api.Tests`** — integration tests that boot the API in-memory with

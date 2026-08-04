@@ -10,6 +10,12 @@ namespace CasePriority.Core.Domain;
 /// </summary>
 public class SupportCase
 {
+    // Length invariants shared by the domain, the API DTO, and the EF mapping,
+    // so every caller (HTTP, console, jobs, tests) is held to what the database
+    // can store.
+    public const int MaxCaseNumberLength = 20;
+    public const int MaxSubjectLength = 200;
+
     // One lock per case. Mutations and consistent reads take it; the "…Unsafe"
     // helpers assume the caller already holds it (not memory-unsafe — lock-unsafe).
     private readonly Lock _stateLock = new();
@@ -44,6 +50,18 @@ public class SupportCase
         if (string.IsNullOrWhiteSpace(subject))
         {
             throw new ArgumentException("Subject is required.", nameof(subject));
+        }
+
+        if (caseNumber.Length > MaxCaseNumberLength)
+        {
+            throw new ArgumentException(
+                $"Case number cannot exceed {MaxCaseNumberLength} characters.", nameof(caseNumber));
+        }
+
+        if (subject.Length > MaxSubjectLength)
+        {
+            throw new ArgumentException(
+                $"Subject cannot exceed {MaxSubjectLength} characters.", nameof(subject));
         }
 
         ValidateSeverity(severity);

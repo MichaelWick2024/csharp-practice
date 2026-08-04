@@ -3,30 +3,30 @@ using CasePriority.Core.Repositories;
 using CasePriority.Core.Services;
 
 // Composition root: the one place that picks and wires the concrete
-// dependencies. The service only ever sees the ICaseRepository abstraction.
-ICaseRepository repository = new InMemoryCaseRepository();
-var caseService = new CaseService(repository);
+// dependencies. The in-memory repository is both the store and the unit of work.
+var repository = new InMemoryCaseRepository();
+var caseService = new CaseService(repository, repository);
 
-caseService.CreateCase("0001", "User cannot log in", severity: 3);
-caseService.CreateCase("0002", "Update email address", severity: 1);
-caseService.CreateCase("0003", "Payment integration failed", severity: 5);
-caseService.CreateCase("0004", "VP onboarding blocked", severity: 2);
+await caseService.CreateCaseAsync("0001", "User cannot log in", severity: 3);
+await caseService.CreateCaseAsync("0002", "Update email address", severity: 1);
+await caseService.CreateCaseAsync("0003", "Payment integration failed", severity: 5);
+await caseService.CreateCaseAsync("0004", "VP onboarding blocked", severity: 2);
 
-// Mutations now require the caller's expected version — the same optimistic
+// Mutations require the caller's expected version — the same optimistic
 // concurrency sequence the HTTP API uses: read snapshot -> submit its version.
-var caseToClose = caseService.GetCaseByNumber("0002");
-caseService.CloseCase("0002", caseToClose.Version);
+var caseToClose = await caseService.GetCaseByNumberAsync("0002");
+await caseService.CloseCaseAsync("0002", caseToClose.Version);
 
-var caseToEscalate = caseService.GetCaseByNumber("0001");
-caseService.EscalateCase("0001", caseToEscalate.Version);
+var caseToEscalate = await caseService.GetCaseByNumberAsync("0001");
+await caseService.EscalateCaseAsync("0001", caseToEscalate.Version);
 
-var vpCase = caseService.GetCaseByNumber("0004");
-caseService.EscalateCase("0004", vpCase.Version);
+var vpCase = await caseService.GetCaseByNumberAsync("0004");
+await caseService.EscalateCaseAsync("0004", vpCase.Version);
 
 // A rejected case: domain validation surfaces through the service.
 try
 {
-    caseService.CreateCase("0005", "Impossible severity", severity: 9);
+    await caseService.CreateCaseAsync("0005", "Impossible severity", severity: 9);
 }
 catch (ArgumentOutOfRangeException ex)
 {
@@ -36,7 +36,7 @@ catch (ArgumentOutOfRangeException ex)
 // A missing case: the service turns the repository's null lookup into an error.
 try
 {
-    caseService.CloseCase("9999", expectedVersion: 1);
+    await caseService.CloseCaseAsync("9999", expectedVersion: 1);
 }
 catch (KeyNotFoundException ex)
 {
@@ -46,7 +46,7 @@ catch (KeyNotFoundException ex)
 Console.WriteLine();
 Console.WriteLine("Open cases:");
 
-foreach (SupportCaseSnapshot currentCase in caseService.GetOpenCasesBySeverity())
+foreach (SupportCaseSnapshot currentCase in await caseService.GetOpenCasesBySeverityAsync())
 {
     Console.WriteLine(
         $"{currentCase.CaseNumber}: {currentCase.Subject} " +

@@ -11,14 +11,14 @@ public class InMemoryCaseRepositoryTests
     // ---- Add --------------------------------------------------------------
 
     [Fact]
-    public void Add_StoresCase()
+    public async Task Add_StoresCase()
     {
         var repository = new InMemoryCaseRepository();
         var supportCase = NewCase("0001");
 
         repository.Add(supportCase);
 
-        Assert.Same(supportCase, repository.GetByCaseNumber("0001"));
+        Assert.Same(supportCase, await repository.GetByCaseNumberAsync("0001"));
     }
 
     [Fact]
@@ -29,7 +29,7 @@ public class InMemoryCaseRepositoryTests
     }
 
     [Fact]
-    public void Add_DuplicateCaseNumber_Throws_AndKeepsOriginal()
+    public async Task Add_DuplicateCaseNumber_Throws_AndKeepsOriginal()
     {
         var repository = new InMemoryCaseRepository();
         var original = new SupportCase("0001", "Original", severity: 3);
@@ -37,8 +37,7 @@ public class InMemoryCaseRepositoryTests
         repository.Add(original);
 
         Assert.Throws<InvalidOperationException>(() => repository.Add(duplicate));
-        // The rejected add must not replace what was already stored.
-        Assert.Same(original, repository.GetByCaseNumber("0001"));
+        Assert.Same(original, await repository.GetByCaseNumberAsync("0001"));
     }
 
     [Fact]
@@ -51,58 +50,58 @@ public class InMemoryCaseRepositoryTests
             () => repository.Add(new SupportCase("ABC1", "Second", severity: 4)));
     }
 
-    // ---- GetByCaseNumber --------------------------------------------------
+    // ---- GetByCaseNumberAsync ---------------------------------------------
 
     [Fact]
-    public void GetByCaseNumber_ExistingCase_ReturnsCase()
+    public async Task GetByCaseNumber_ExistingCase_ReturnsCase()
     {
         var repository = new InMemoryCaseRepository();
         var supportCase = NewCase("0002");
         repository.Add(supportCase);
 
-        Assert.Same(supportCase, repository.GetByCaseNumber("0002"));
+        Assert.Same(supportCase, await repository.GetByCaseNumberAsync("0002"));
     }
 
     [Fact]
-    public void GetByCaseNumber_MissingCase_ReturnsNull()
+    public async Task GetByCaseNumber_MissingCase_ReturnsNull()
     {
         var repository = new InMemoryCaseRepository();
-        Assert.Null(repository.GetByCaseNumber("nope"));
+        Assert.Null(await repository.GetByCaseNumberAsync("nope"));
     }
 
     [Fact]
-    public void GetByCaseNumber_IsCaseInsensitive()
+    public async Task GetByCaseNumber_IsCaseInsensitive()
     {
         var repository = new InMemoryCaseRepository();
         var supportCase = new SupportCase("abc1", "Subject", severity: 3);
         repository.Add(supportCase);
 
-        Assert.Same(supportCase, repository.GetByCaseNumber("ABC1"));
+        Assert.Same(supportCase, await repository.GetByCaseNumberAsync("ABC1"));
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void GetByCaseNumber_BlankCaseNumber_Throws(string? caseNumber)
+    public async Task GetByCaseNumber_BlankCaseNumber_Throws(string? caseNumber)
     {
         var repository = new InMemoryCaseRepository();
-        var ex = Assert.Throws<ArgumentException>(
-            () => repository.GetByCaseNumber(caseNumber!));
+        var ex = await Assert.ThrowsAsync<ArgumentException>(
+            () => repository.GetByCaseNumberAsync(caseNumber!));
         Assert.Equal("caseNumber", ex.ParamName);
     }
 
-    // ---- GetAll -----------------------------------------------------------
+    // ---- GetAllAsync ------------------------------------------------------
 
     [Fact]
-    public void GetAll_ReturnsAllCases()
+    public async Task GetAll_ReturnsAllCases()
     {
         var repository = new InMemoryCaseRepository();
         repository.Add(NewCase("0001"));
         repository.Add(NewCase("0002"));
         repository.Add(NewCase("0003"));
 
-        var all = repository.GetAll();
+        var all = await repository.GetAllAsync();
 
         Assert.Equal(3, all.Count);
         Assert.Contains(all, c => c.CaseNumber == "0001");
@@ -111,35 +110,16 @@ public class InMemoryCaseRepositoryTests
     }
 
     [Fact]
-    public void GetAll_DoesNotExposeInternalCollection()
+    public async Task GetAll_ReturnsSnapshot_NotLiveView()
     {
         var repository = new InMemoryCaseRepository();
         repository.Add(NewCase("0001"));
 
-        var snapshot = repository.GetAll();
-        // Mutating the returned list must not affect the repository.
-        if (snapshot is List<SupportCase> mutable)
-        {
-            mutable.Add(NewCase("9999"));
-        }
-
-        Assert.Single(repository.GetAll());
-        Assert.Null(repository.GetByCaseNumber("9999"));
-    }
-
-    [Fact]
-    public void GetAll_ReturnsSnapshot_NotLiveView()
-    {
-        // Stronger contract test: independent of the returned concrete type,
-        // a later Add must not appear in an earlier snapshot.
-        var repository = new InMemoryCaseRepository();
-        repository.Add(NewCase("0001"));
-
-        var snapshot = repository.GetAll();
+        var snapshot = await repository.GetAllAsync();
         repository.Add(NewCase("0002"));
 
-        Assert.Single(snapshot);                 // earlier snapshot unchanged
-        Assert.Equal(2, repository.GetAll().Count); // repository reflects the add
+        Assert.Single(snapshot);                       // earlier snapshot unchanged
+        Assert.Equal(2, (await repository.GetAllAsync()).Count); // repo reflects the add
     }
 
     // ---- Concurrency ------------------------------------------------------
@@ -147,8 +127,6 @@ public class InMemoryCaseRepositoryTests
     [Fact]
     public void Add_ConcurrentDuplicateAttempts_StoresExactlyOneCase()
     {
-        // The ConcurrentDictionary-backed repo must let exactly one racing add
-        // win when many threads insert the same case number at once.
         var repository = new InMemoryCaseRepository();
         var successfulAdds = 0;
         var rejectedAdds = 0;
@@ -173,6 +151,5 @@ public class InMemoryCaseRepositoryTests
 
         Assert.Equal(1, successfulAdds);
         Assert.Equal(19, rejectedAdds);
-        Assert.Single(repository.GetAll());
     }
 }

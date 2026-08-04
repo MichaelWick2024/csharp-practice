@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using CasePriority.Core.Domain;
 
 namespace CasePriority.Api.Contracts;
 
@@ -11,11 +12,11 @@ namespace CasePriority.Api.Contracts;
 public sealed class CreateCaseRequest
 {
     [Required]
-    [StringLength(20, MinimumLength = 1)]
+    [StringLength(SupportCase.MaxCaseNumberLength, MinimumLength = 1)]
     public string CaseNumber { get; init; } = string.Empty;
 
     [Required]
-    [StringLength(200, MinimumLength = 1)]
+    [StringLength(SupportCase.MaxSubjectLength, MinimumLength = 1)]
     public string Subject { get; init; } = string.Empty;
 
     [Range(1, 5)]
