@@ -7,7 +7,10 @@ namespace CasePriorityApp.Repositories;
 /// </summary>
 public interface ICaseRepository
 {
-    /// <summary>All stored cases, as a snapshot the caller cannot mutate.</summary>
+    /// <summary>
+    /// Returns a snapshot of all stored cases. Structural changes to the
+    /// returned collection do not affect the repository.
+    /// </summary>
     IReadOnlyList<SupportCase> GetAll();
 
     /// <summary>The matching case, or <c>null</c> if none exists.</summary>

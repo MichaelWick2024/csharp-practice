@@ -126,4 +126,19 @@ public class InMemoryCaseRepositoryTests
         Assert.Single(repository.GetAll());
         Assert.Null(repository.GetByCaseNumber("9999"));
     }
+
+    [Fact]
+    public void GetAll_ReturnsSnapshot_NotLiveView()
+    {
+        // Stronger contract test: independent of the returned concrete type,
+        // a later Add must not appear in an earlier snapshot.
+        var repository = new InMemoryCaseRepository();
+        repository.Add(NewCase("0001"));
+
+        var snapshot = repository.GetAll();
+        repository.Add(NewCase("0002"));
+
+        Assert.Single(snapshot);                 // earlier snapshot unchanged
+        Assert.Equal(2, repository.GetAll().Count); // repository reflects the add
+    }
 }
