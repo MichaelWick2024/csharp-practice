@@ -1,10 +1,6 @@
 @host = http://localhost:5075
 
-### Get all cases
-GET {{host}}/api/cases
-Accept: application/json
-
-### Create a case
+### Create
 POST {{host}}/api/cases
 Content-Type: application/json
 
@@ -14,16 +10,30 @@ Content-Type: application/json
   "severity": 3
 }
 
-### Retrieve one case
+### Retrieve current state and ETag
 GET {{host}}/api/cases/WEB-0001
 Accept: application/json
 
-### Invalid request (severity out of range -> 400)
-POST {{host}}/api/cases
+### Close version 1
+PATCH {{host}}/api/cases/WEB-0001/close
+If-Match: "1"
+
+### Stale update — should return 412 Precondition Failed
+PATCH {{host}}/api/cases/WEB-0001/escalate
+If-Match: "1"
+
+### Reopen current version 2
+PATCH {{host}}/api/cases/WEB-0001/reopen
+If-Match: "2"
+
+### Change severity at version 3
+PATCH {{host}}/api/cases/WEB-0001/severity
+If-Match: "3"
 Content-Type: application/json
 
 {
-  "caseNumber": "WEB-0002",
-  "subject": "Invalid severity example",
-  "severity": 9
+  "severity": 5
 }
+
+### Missing If-Match — should return 428 Precondition Required
+PATCH {{host}}/api/cases/WEB-0001/escalate

@@ -1,3 +1,5 @@
+using CasePriority.Api.Http;
+using CasePriority.Core.Domain;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 
@@ -5,7 +7,8 @@ namespace CasePriority.Api.ErrorHandling;
 
 /// <summary>
 /// Central mapping from domain/service exceptions to HTTP Problem Details, so
-/// controllers don't each catch-and-translate. The layering pays off here:
+/// controllers don't each catch-and-translate:
+/// PreconditionRequiredException -> 428, CaseConcurrencyException -> 412,
 /// KeyNotFoundException -> 404, InvalidOperationException -> 409,
 /// ArgumentException -> 400, anything else -> 500.
 /// </summary>
@@ -21,6 +24,12 @@ public sealed class ApiExceptionHandler(
     {
         var (statusCode, title) = exception switch
         {
+            PreconditionRequiredException =>
+                (StatusCodes.Status428PreconditionRequired, "Precondition required"),
+
+            CaseConcurrencyException =>
+                (StatusCodes.Status412PreconditionFailed, "Precondition failed"),
+
             KeyNotFoundException =>
                 (StatusCodes.Status404NotFound, "Case not found"),
 
@@ -45,20 +54,31 @@ public sealed class ApiExceptionHandler(
 
         httpContext.Response.StatusCode = statusCode;
 
+        var problemDetails = new ProblemDetails
+        {
+            Status = statusCode,
+            Title = title,
+            Detail = statusCode >= StatusCodes.Status500InternalServerError
+                ? "An unexpected error occurred."
+                : exception.Message,
+            Instance = httpContext.Request.Path
+        };
+
+        // Give a stale-write client the machine-readable versions it needs to
+        // re-fetch and reconcile.
+        if (exception is CaseConcurrencyException concurrency)
+        {
+            problemDetails.Extensions["caseNumber"] = concurrency.CaseNumber;
+            problemDetails.Extensions["expectedVersion"] = concurrency.ExpectedVersion;
+            problemDetails.Extensions["currentVersion"] = concurrency.ActualVersion;
+        }
+
         await problemDetailsService.WriteAsync(
             new ProblemDetailsContext
             {
                 HttpContext = httpContext,
                 Exception = exception,
-                ProblemDetails = new ProblemDetails
-                {
-                    Status = statusCode,
-                    Title = title,
-                    Detail = statusCode >= StatusCodes.Status500InternalServerError
-                        ? "An unexpected error occurred."
-                        : exception.Message,
-                    Instance = httpContext.Request.Path
-                }
+                ProblemDetails = problemDetails
             });
 
         return true;

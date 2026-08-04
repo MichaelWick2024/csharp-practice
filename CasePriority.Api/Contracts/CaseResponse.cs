@@ -3,9 +3,9 @@ using CasePriority.Core.Domain;
 namespace CasePriority.Api.Contracts;
 
 /// <summary>
-/// The API's view of a case. Keeping this separate from <c>SupportCase</c> means
-/// the HTTP response shape is not permanently coupled to every domain property,
-/// and gives a deliberate mapping boundary: SupportCase -> CaseResponse -> JSON.
+/// The API's view of a case, including its optimistic-concurrency `version`
+/// (also surfaced as the ETag). Mapped from an immutable snapshot, so the HTTP
+/// layer never holds a mutable domain object.
 /// </summary>
 public sealed record CaseResponse(
     string CaseNumber,
@@ -13,18 +13,20 @@ public sealed record CaseResponse(
     int Severity,
     bool IsOpen,
     bool IsExecutiveEscalation,
-    CasePriorityLevel Priority)
+    CasePriorityLevel Priority,
+    long Version)
 {
-    public static CaseResponse FromDomain(SupportCase supportCase)
+    public static CaseResponse FromSnapshot(SupportCaseSnapshot snapshot)
     {
-        ArgumentNullException.ThrowIfNull(supportCase);
+        ArgumentNullException.ThrowIfNull(snapshot);
 
         return new CaseResponse(
-            supportCase.CaseNumber,
-            supportCase.Subject,
-            supportCase.Severity,
-            supportCase.IsOpen,
-            supportCase.IsExecutiveEscalation,
-            supportCase.Priority);
+            snapshot.CaseNumber,
+            snapshot.Subject,
+            snapshot.Severity,
+            snapshot.IsOpen,
+            snapshot.IsExecutiveEscalation,
+            snapshot.Priority,
+            snapshot.Version);
     }
 }

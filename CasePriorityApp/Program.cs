@@ -12,9 +12,16 @@ caseService.CreateCase("0002", "Update email address", severity: 1);
 caseService.CreateCase("0003", "Payment integration failed", severity: 5);
 caseService.CreateCase("0004", "VP onboarding blocked", severity: 2);
 
-caseService.CloseCase("0002");
-caseService.EscalateCase("0001");
-caseService.EscalateCase("0004");
+// Mutations now require the caller's expected version — the same optimistic
+// concurrency sequence the HTTP API uses: read snapshot -> submit its version.
+var caseToClose = caseService.GetCaseByNumber("0002");
+caseService.CloseCase("0002", caseToClose.Version);
+
+var caseToEscalate = caseService.GetCaseByNumber("0001");
+caseService.EscalateCase("0001", caseToEscalate.Version);
+
+var vpCase = caseService.GetCaseByNumber("0004");
+caseService.EscalateCase("0004", vpCase.Version);
 
 // A rejected case: domain validation surfaces through the service.
 try
@@ -29,7 +36,7 @@ catch (ArgumentOutOfRangeException ex)
 // A missing case: the service turns the repository's null lookup into an error.
 try
 {
-    caseService.CloseCase("9999");
+    caseService.CloseCase("9999", expectedVersion: 1);
 }
 catch (KeyNotFoundException ex)
 {
@@ -39,10 +46,10 @@ catch (KeyNotFoundException ex)
 Console.WriteLine();
 Console.WriteLine("Open cases:");
 
-foreach (SupportCase currentCase in caseService.GetOpenCasesBySeverity())
+foreach (SupportCaseSnapshot currentCase in caseService.GetOpenCasesBySeverity())
 {
     Console.WriteLine(
         $"{currentCase.CaseNumber}: {currentCase.Subject} " +
-        $"— Priority: {currentCase.Priority}"
+        $"— Priority: {currentCase.Priority} (v{currentCase.Version})"
     );
 }
