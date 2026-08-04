@@ -23,6 +23,35 @@ cd CasePriorityApp
 dotnet run
 ```
 
+## Architecture (Day 4)
+
+The app is layered so each piece has one job, and dependencies point at
+abstractions rather than concrete types:
+
+```
+Program.cs            composition root — picks and wires the concrete objects
+    │
+    ▼
+CaseService           coordinates use cases (create, close, escalate, query)
+    │
+    ▼
+ICaseRepository       persistence contract the service depends on
+    │
+    ▼
+InMemoryCaseRepository   current storage (dictionary keyed by case number)
+    │
+    ▼
+SupportCase           domain object — guards its own state & invariants
+```
+
+- **`SupportCase`** owns the rules about one case (validation, guarded state transitions, computed `Priority`).
+- **`ICaseRepository`** describes persistence operations without a storage mechanism.
+- **`InMemoryCaseRepository`** provides the current dictionary-backed storage; a database-backed one can replace it later without touching the service.
+- **`CaseService`** coordinates application use cases and depends on `ICaseRepository` (constructor injection), never on the concrete repository.
+- **`Program.cs`** is only the composition root plus a demonstration — it holds no case list and does no filtering, lookup, or state mutation itself.
+
+`CaseService → ICaseRepository` is the key direction: the service knows *what* storage must do, not *how* it does it. ASP.NET Core will later perform this same constructor injection through its built-in container.
+
 ## Testing
 
 xUnit tests live in `CasePriorityApp.Tests`. Run the whole solution:
