@@ -147,6 +147,25 @@ public sealed class CasesMutationApiTests : IClassFixture<WebApplicationFactory<
         Assert.Equal(2, body.Version);
     }
 
+    [Fact]
+    public async Task ChangeSeverity_SameValue_PreservesVersionAndEtag()
+    {
+        // A no-op mutation must NOT bump the version/ETag: the ETag tracks actual
+        // state changes, not the number of requests received.
+        var created = await CreateCaseAsync(severity: 3);
+
+        var response = await _client.SendAsync(
+            Patch($"/api/cases/{created.CaseNumber}/severity", "\"1\"", new { severity = 3 }));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("\"1\"", response.Headers.ETag?.Tag);
+
+        var body = await response.Content.ReadFromJsonAsync<CaseResponse>(JsonOptions);
+        Assert.NotNull(body);
+        Assert.Equal(3, body.Severity);
+        Assert.Equal(1, body.Version);
+    }
+
     // ---- Precondition handling -------------------------------------------
 
     [Fact]
@@ -183,10 +202,10 @@ public sealed class CasesMutationApiTests : IClassFixture<WebApplicationFactory<
     public async Task Stale_IfMatch_Returns412_WithVersionDetails_AndNoMutation()
     {
         var created = await CreateCaseAsync();
-        // Close at v1 -> now v2.
+        // Escalate at v1 -> now v2.
         await _client.SendAsync(Patch($"/api/cases/{created.CaseNumber}/escalate", "\"1\""));
 
-        // Escalate again using the stale "1".
+        // Change severity using the now-stale "1".
         var response = await _client.SendAsync(
             Patch($"/api/cases/{created.CaseNumber}/severity", "\"1\"", new { severity = 5 }));
 
@@ -257,16 +276,39 @@ public sealed class CasesMutationApiTests : IClassFixture<WebApplicationFactory<
     // ---- OpenAPI ----------------------------------------------------------
 
     [Fact]
-    public async Task OpenApi_DocumentsMutationRoutes_AndIfMatch()
+    public async Task OpenApi_EveryPatch_DeclaresRequiredIfMatch()
     {
         var response = await _client.GetAsync("/openapi/v1.json");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var json = await response.Content.ReadAsStringAsync();
-        Assert.Contains("/api/cases/{caseNumber}/close", json);
-        Assert.Contains("/api/cases/{caseNumber}/reopen", json);
-        Assert.Contains("/api/cases/{caseNumber}/escalate", json);
-        Assert.Contains("/api/cases/{caseNumber}/severity", json);
-        Assert.Contains("If-Match", json);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var paths = doc.RootElement.GetProperty("paths");
+
+        string[] routes =
+        [
+            "/api/cases/{caseNumber}/close",
+            "/api/cases/{caseNumber}/reopen",
+            "/api/cases/{caseNumber}/escalate",
+            "/api/cases/{caseNumber}/severity",
+        ];
+
+        foreach (var route in routes)
+        {
+            var patch = paths.GetProperty(route).GetProperty("patch");
+            var parameters = patch.GetProperty("parameters").EnumerateArray();
+
+            var ifMatch = parameters.FirstOrDefault(p =>
+                p.TryGetProperty("name", out var name) &&
+                string.Equals(name.GetString(), "If-Match", StringComparison.OrdinalIgnoreCase) &&
+                p.TryGetProperty("in", out var location) &&
+                location.GetString() == "header");
+
+            Assert.True(
+                ifMatch.ValueKind == JsonValueKind.Object,
+                $"{route} is missing an If-Match header parameter");
+            Assert.True(
+                ifMatch.GetProperty("required").GetBoolean(),
+                $"{route} should declare If-Match as required");
+        }
     }
 }
