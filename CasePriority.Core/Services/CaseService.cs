@@ -4,10 +4,11 @@ using CasePriority.Core.Repositories;
 namespace CasePriority.Core.Services;
 
 /// <summary>
-/// Coordinates application use cases over the case store. It depends on the
-/// <see cref="ICaseRepository"/> abstraction (constructor injection), not on a
-/// concrete storage type, so the storage mechanism can change without touching
-/// this service.
+/// Coordinates application use cases over the case store. Depends on the
+/// <see cref="ICaseRepository"/> abstraction (constructor injection), not a
+/// concrete storage type. Its API-facing boundary hands back immutable
+/// <see cref="SupportCaseSnapshot"/> values, and every mutation requires the
+/// caller's expected version (optimistic concurrency).
 /// </summary>
 public class CaseService
 {
@@ -23,59 +24,67 @@ public class CaseService
 
     /// <summary>
     /// Creates and stores a case. Validation lives in <see cref="SupportCase"/>'s
-    /// constructor, so it is not duplicated here.
+    /// constructor, so it is not duplicated here. Returns a version-1 snapshot.
     /// </summary>
-    public SupportCase CreateCase(string caseNumber, string subject, int severity)
+    public SupportCaseSnapshot CreateCase(string caseNumber, string subject, int severity)
     {
         var supportCase = new SupportCase(caseNumber, subject, severity);
         _repository.Add(supportCase);
-        return supportCase;
+        return supportCase.ToSnapshot();
     }
 
-    public IReadOnlyList<SupportCase> GetAllCases()
+    public IReadOnlyList<SupportCaseSnapshot> GetAllCases()
     {
-        return _repository.GetAll();
+        return _repository
+            .GetAll()
+            .Select(supportCase => supportCase.ToSnapshot())
+            .ToList();
     }
 
-    /// <summary>The requested case, or <see cref="KeyNotFoundException"/> if absent.</summary>
-    public SupportCase GetCaseByNumber(string caseNumber)
+    /// <summary>The requested case's snapshot, or <see cref="KeyNotFoundException"/> if absent.</summary>
+    public SupportCaseSnapshot GetCaseByNumber(string caseNumber)
     {
-        return GetRequiredCase(caseNumber);
+        return GetRequiredCase(caseNumber).ToSnapshot();
     }
 
     /// <summary>
     /// Open cases sorted by raw severity (highest first), with case number as a
     /// stable tie-breaker. Named for severity deliberately, to avoid conflating
-    /// raw severity with the computed <see cref="SupportCase.Priority"/>.
+    /// raw severity with the computed priority.
     /// </summary>
-    public IReadOnlyList<SupportCase> GetOpenCasesBySeverity()
+    public IReadOnlyList<SupportCaseSnapshot> GetOpenCasesBySeverity()
     {
         return _repository
             .GetAll()
-            .Where(supportCase => supportCase.IsOpen)
-            .OrderByDescending(supportCase => supportCase.Severity)
-            .ThenBy(supportCase => supportCase.CaseNumber)
+            .Select(supportCase => supportCase.ToSnapshot())
+            .Where(snapshot => snapshot.IsOpen)
+            .OrderByDescending(snapshot => snapshot.Severity)
+            .ThenBy(snapshot => snapshot.CaseNumber)
             .ToList();
     }
 
-    public void CloseCase(string caseNumber)
+    // ---- Version-aware mutations -----------------------------------------
+    // Each finds the case (404 if missing) and applies the versioned domain
+    // operation, which throws CaseConcurrencyException on a stale version.
+
+    public SupportCaseSnapshot CloseCase(string caseNumber, long expectedVersion)
     {
-        GetRequiredCase(caseNumber).Close();
+        return GetRequiredCase(caseNumber).Close(expectedVersion);
     }
 
-    public void ReopenCase(string caseNumber)
+    public SupportCaseSnapshot ReopenCase(string caseNumber, long expectedVersion)
     {
-        GetRequiredCase(caseNumber).Reopen();
+        return GetRequiredCase(caseNumber).Reopen(expectedVersion);
     }
 
-    public void EscalateCase(string caseNumber)
+    public SupportCaseSnapshot EscalateCase(string caseNumber, long expectedVersion)
     {
-        GetRequiredCase(caseNumber).Escalate();
+        return GetRequiredCase(caseNumber).Escalate(expectedVersion);
     }
 
-    public void ChangeCaseSeverity(string caseNumber, int severity)
+    public SupportCaseSnapshot ChangeCaseSeverity(string caseNumber, int severity, long expectedVersion)
     {
-        GetRequiredCase(caseNumber).ChangeSeverity(severity);
+        return GetRequiredCase(caseNumber).ChangeSeverity(severity, expectedVersion);
     }
 
     // The repository returns null for a missing case; the service decides that

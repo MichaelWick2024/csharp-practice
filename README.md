@@ -16,35 +16,54 @@ is a small, runnable project, growing toward a full ASP.NET Core case-management
 | **`CasePriorityApp.Tests`** | xUnit | Unit tests for the domain, repository, and service |
 | **`CasePriority.Api.Tests`** | xUnit | Integration tests driving the API through `WebApplicationFactory` |
 
-## Architecture (Day 5)
+## Architecture (Day 6)
 
 The domain/repository/service layers live in a reusable class library; the API and
-the console app are two front ends that assemble the same Core the same way.
+the console app are two front ends that assemble the same Core the same way. Mutations
+use **optimistic concurrency** — each case has a version, surfaced as an HTTP ETag.
 
 ```
-HTTP client                       console
+HTTP If-Match                     console
     │                                │
     ▼                                ▼
 CasesController                 Program.cs (composition root)
+    │  expected version              │
     └───────────────┬────────────────┘
                     ▼
-             CaseService              coordinates use cases (create, query, ...)
+             CaseService              coordinates use cases; mutations require a version
                     │
                     ▼
              ICaseRepository          persistence contract the service depends on
                     │
                     ▼
-          InMemoryCaseRepository      ConcurrentDictionary-backed storage (thread-safe singleton)
+          InMemoryCaseRepository      ConcurrentDictionary — collection-safe singleton
                     │
                     ▼
-             SupportCase              domain object — guards its own state & invariants
+             SupportCase              per-case lock: atomic version-check + mutation + bump
+                    │
+                    ▼
+          SupportCaseSnapshot         immutable view returned by service → CaseResponse + ETag
 ```
 
-- **`SupportCase`** owns the rules about one case (validation, guarded transitions, computed `Priority`).
+- **`SupportCase`** owns the rules about one case and a per-case `Lock` + `Version`. Every mutation runs the expected-version check, the domain transition, and the version bump **inside one critical section**, then returns an immutable `SupportCaseSnapshot`. The version increments only when the representation actually changes.
 - **`ICaseRepository`** describes persistence operations without a storage mechanism.
-- **`InMemoryCaseRepository`** uses a `ConcurrentDictionary`, making its **collection** operations safe across concurrent requests, so it can be a shared singleton; a database-backed one can replace it later. (Coordination for concurrent mutation of an individual `SupportCase` is deferred until mutation endpoints are introduced — Day 5 exposes only GET and POST.)
-- **`CaseService`** coordinates use cases and depends on `ICaseRepository` (constructor injection), never the concrete repository.
-- **`CasesController`** does only HTTP work — validated request DTOs in, `CaseResponse` DTOs out, REST status codes — and delegates business work to the service. Domain/service exceptions map to Problem Details centrally (`ApiExceptionHandler`): `KeyNotFoundException` → 404, `InvalidOperationException` → 409, `ArgumentException` → 400.
+- **`InMemoryCaseRepository`** uses a `ConcurrentDictionary`, making its **collection** operations safe across concurrent requests (a shared singleton). Per-object coordination lives in `SupportCase`'s lock.
+- **`CaseService`** returns snapshots and requires an expected version on every mutation; it never hands out the mutable domain object.
+- **`CasesController`** does only HTTP work and the ETag/If-Match plumbing. Exceptions map to Problem Details centrally (`ApiExceptionHandler`): `PreconditionRequiredException` → **428**, `CaseConcurrencyException` → **412**, `KeyNotFoundException` → 404, `InvalidOperationException` → 409, `ArgumentException` → 400.
+
+### Endpoints
+
+| Method | Route | Notes |
+|--------|-------|-------|
+| `GET` | `/api/cases` | all cases |
+| `GET` | `/api/cases/{caseNumber}` | one case; response carries an `ETag` |
+| `POST` | `/api/cases` | create; `201` + `Location` + `ETag: "1"` |
+| `PATCH` | `/api/cases/{caseNumber}/close` | requires `If-Match` |
+| `PATCH` | `/api/cases/{caseNumber}/reopen` | requires `If-Match` |
+| `PATCH` | `/api/cases/{caseNumber}/escalate` | requires `If-Match` |
+| `PATCH` | `/api/cases/{caseNumber}/severity` | requires `If-Match`; body `{ "severity": 1..5 }` |
+
+Every `PATCH` needs `If-Match: "<version>"`. Missing → **428**, malformed → **400**, stale → **412**, invalid transition → **409**, success → **200** with the new `ETag`.
 
 ### Run the API
 
@@ -55,9 +74,16 @@ dotnet run --project CasePriority.Api        # http://localhost:5075
 Then use `CasePriority.Api/CasePriority.Api.http`, or:
 
 ```bash
+# Create (returns ETag: "1")
 curl -i -X POST http://localhost:5075/api/cases \
   -H "Content-Type: application/json" \
   -d '{"caseNumber":"WEB-0001","subject":"User cannot access the portal","severity":3}'
+
+# Close using the current version (returns ETag: "2")
+curl -i -X PATCH http://localhost:5075/api/cases/WEB-0001/close -H 'If-Match: "1"'
+
+# Re-using the stale version now returns 412 Precondition Failed
+curl -i -X PATCH http://localhost:5075/api/cases/WEB-0001/escalate -H 'If-Match: "1"'
 ```
 
 ### Run the console demo
