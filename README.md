@@ -42,7 +42,7 @@ CasesController                 Program.cs (composition root)
 
 - **`SupportCase`** owns the rules about one case (validation, guarded transitions, computed `Priority`).
 - **`ICaseRepository`** describes persistence operations without a storage mechanism.
-- **`InMemoryCaseRepository`** uses a `ConcurrentDictionary`, so it's safe as a shared singleton across concurrent web requests; a database-backed one can replace it later.
+- **`InMemoryCaseRepository`** uses a `ConcurrentDictionary`, making its **collection** operations safe across concurrent requests, so it can be a shared singleton; a database-backed one can replace it later. (Coordination for concurrent mutation of an individual `SupportCase` is deferred until mutation endpoints are introduced — Day 5 exposes only GET and POST.)
 - **`CaseService`** coordinates use cases and depends on `ICaseRepository` (constructor injection), never the concrete repository.
 - **`CasesController`** does only HTTP work — validated request DTOs in, `CaseResponse` DTOs out, REST status codes — and delegates business work to the service. Domain/service exceptions map to Problem Details centrally (`ApiExceptionHandler`): `KeyNotFoundException` → 404, `InvalidOperationException` → 409, `ArgumentException` → 400.
 

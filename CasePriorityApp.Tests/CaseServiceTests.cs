@@ -1,8 +1,6 @@
 using CasePriority.Core.Domain;
 using CasePriority.Core.Repositories;
 using CasePriority.Core.Services;
-// The CasePriority enum shares its name with the CasePriority root namespace.
-using Priority = CasePriority.Core.Domain.CasePriority;
 
 namespace CasePriorityApp.Tests;
 
@@ -154,7 +152,7 @@ public class CaseServiceTests
 
         var stored = repository.GetByCaseNumber("0001")!;
         Assert.True(stored.IsExecutiveEscalation);
-        Assert.Equal(Priority.Critical, stored.Priority);
+        Assert.Equal(CasePriorityLevel.Critical, stored.Priority);
     }
 
     [Fact]
@@ -167,7 +165,7 @@ public class CaseServiceTests
 
         var stored = repository.GetByCaseNumber("0001")!;
         Assert.Equal(5, stored.Severity);
-        Assert.Equal(Priority.Critical, stored.Priority);
+        Assert.Equal(CasePriorityLevel.Critical, stored.Priority);
     }
 
     // ---- Missing cases & propagated errors --------------------------------

@@ -5,7 +5,7 @@ namespace CasePriority.Core.Domain;
 /// raw string keeps the set of valid values closed and checkable at compile
 /// time (no typos like "Criticl"), the way an Apex picklist constrains values.
 /// </summary>
-public enum CasePriority
+public enum CasePriorityLevel
 {
     Normal,
     High,

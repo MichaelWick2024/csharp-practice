@@ -1,9 +1,8 @@
 using System.Text.Json.Serialization;
 using CasePriority.Api.ErrorHandling;
+using CasePriority.Core.Domain;
 using CasePriority.Core.Repositories;
 using CasePriority.Core.Services;
-// Alias the enum, whose name collides with the CasePriority root namespace.
-using Priority = CasePriority.Core.Domain.CasePriority;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,7 +12,7 @@ builder.Services
     {
         // Serialize the priority enum as "Normal"/"High"/"Critical", not numbers.
         options.JsonSerializerOptions.Converters.Add(
-            new JsonStringEnumConverter<Priority>());
+            new JsonStringEnumConverter<CasePriorityLevel>());
     });
 
 builder.Services.AddOpenApi();
@@ -39,7 +38,3 @@ if (app.Environment.IsDevelopment())
 app.MapControllers();
 
 app.Run();
-
-// Exposes the generated top-level Program type to the integration-test project
-// (WebApplicationFactory<Program>).
-public partial class Program;

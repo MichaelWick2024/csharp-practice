@@ -119,6 +119,12 @@ public sealed class CasesApiTests : IClassFixture<WebApplicationFactory<Program>
 
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+
+        // Prove the duplicate maps to Problem Details via the central handler.
+        var problem = await second.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.NotNull(problem);
+        Assert.Equal(409, problem.Status);
+        Assert.Equal("Request conflict", problem.Title);
     }
 
     [Fact]

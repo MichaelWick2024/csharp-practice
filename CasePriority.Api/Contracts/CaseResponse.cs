@@ -1,7 +1,4 @@
 using CasePriority.Core.Domain;
-// The CasePriority enum shares its name with the CasePriority root namespace,
-// so a bare `CasePriority` would bind to the namespace here. Alias the enum.
-using Priority = CasePriority.Core.Domain.CasePriority;
 
 namespace CasePriority.Api.Contracts;
 
@@ -16,7 +13,7 @@ public sealed record CaseResponse(
     int Severity,
     bool IsOpen,
     bool IsExecutiveEscalation,
-    Priority Priority)
+    CasePriorityLevel Priority)
 {
     public static CaseResponse FromDomain(SupportCase supportCase)
     {
