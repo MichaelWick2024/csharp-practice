@@ -1,4 +1,7 @@
 <Solution>
+  <Project Path="CasePriority.Api.Tests/CasePriority.Api.Tests.csproj" />
+  <Project Path="CasePriority.Api/CasePriority.Api.csproj" />
+  <Project Path="CasePriority.Core/CasePriority.Core.csproj" />
   <Project Path="CasePriorityApp.Tests/CasePriorityApp.Tests.csproj" />
   <Project Path="CasePriorityApp/CasePriorityApp.csproj" />
 </Solution>

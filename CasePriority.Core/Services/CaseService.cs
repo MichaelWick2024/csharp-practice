@@ -1,6 +1,7 @@
-using CasePriorityApp.Repositories;
+using CasePriority.Core.Domain;
+using CasePriority.Core.Repositories;
 
-namespace CasePriorityApp.Services;
+namespace CasePriority.Core.Services;
 
 /// <summary>
 /// Coordinates application use cases over the case store. It depends on the
@@ -34,6 +35,12 @@ public class CaseService
     public IReadOnlyList<SupportCase> GetAllCases()
     {
         return _repository.GetAll();
+    }
+
+    /// <summary>The requested case, or <see cref="KeyNotFoundException"/> if absent.</summary>
+    public SupportCase GetCaseByNumber(string caseNumber)
+    {
+        return GetRequiredCase(caseNumber);
     }
 
     /// <summary>

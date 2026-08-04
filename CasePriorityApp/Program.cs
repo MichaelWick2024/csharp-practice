@@ -1,6 +1,6 @@
-using CasePriorityApp;
-using CasePriorityApp.Repositories;
-using CasePriorityApp.Services;
+using CasePriority.Core.Domain;
+using CasePriority.Core.Repositories;
+using CasePriority.Core.Services;
 
 // Composition root: the one place that picks and wires the concrete
 // dependencies. The service only ever sees the ICaseRepository abstraction.

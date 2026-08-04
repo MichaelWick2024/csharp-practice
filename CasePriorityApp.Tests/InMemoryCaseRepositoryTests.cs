@@ -1,5 +1,5 @@
-using CasePriorityApp;
-using CasePriorityApp.Repositories;
+using CasePriority.Core.Domain;
+using CasePriority.Core.Repositories;
 
 namespace CasePriorityApp.Tests;
 
@@ -140,5 +140,39 @@ public class InMemoryCaseRepositoryTests
 
         Assert.Single(snapshot);                 // earlier snapshot unchanged
         Assert.Equal(2, repository.GetAll().Count); // repository reflects the add
+    }
+
+    // ---- Concurrency ------------------------------------------------------
+
+    [Fact]
+    public void Add_ConcurrentDuplicateAttempts_StoresExactlyOneCase()
+    {
+        // The ConcurrentDictionary-backed repo must let exactly one racing add
+        // win when many threads insert the same case number at once.
+        var repository = new InMemoryCaseRepository();
+        var successfulAdds = 0;
+        var rejectedAdds = 0;
+
+        var duplicateCases = Enumerable
+            .Range(1, 20)
+            .Select(index => new SupportCase("0001", $"Attempt {index}", severity: 3))
+            .ToList();
+
+        Parallel.ForEach(duplicateCases, supportCase =>
+        {
+            try
+            {
+                repository.Add(supportCase);
+                Interlocked.Increment(ref successfulAdds);
+            }
+            catch (InvalidOperationException)
+            {
+                Interlocked.Increment(ref rejectedAdds);
+            }
+        });
+
+        Assert.Equal(1, successfulAdds);
+        Assert.Equal(19, rejectedAdds);
+        Assert.Single(repository.GetAll());
     }
 }

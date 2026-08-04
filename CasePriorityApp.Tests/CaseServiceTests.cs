@@ -1,6 +1,6 @@
-using CasePriorityApp;
-using CasePriorityApp.Repositories;
-using CasePriorityApp.Services;
+using CasePriority.Core.Domain;
+using CasePriority.Core.Repositories;
+using CasePriority.Core.Services;
 
 namespace CasePriorityApp.Tests;
 
@@ -152,7 +152,7 @@ public class CaseServiceTests
 
         var stored = repository.GetByCaseNumber("0001")!;
         Assert.True(stored.IsExecutiveEscalation);
-        Assert.Equal(CasePriority.Critical, stored.Priority);
+        Assert.Equal(CasePriorityLevel.Critical, stored.Priority);
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public class CaseServiceTests
 
         var stored = repository.GetByCaseNumber("0001")!;
         Assert.Equal(5, stored.Severity);
-        Assert.Equal(CasePriority.Critical, stored.Priority);
+        Assert.Equal(CasePriorityLevel.Critical, stored.Priority);
     }
 
     // ---- Missing cases & propagated errors --------------------------------

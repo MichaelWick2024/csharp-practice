@@ -1,4 +1,4 @@
-namespace CasePriorityApp;
+namespace CasePriority.Core.Domain;
 
 /// <summary>
 /// A support case. State is encapsulated: identity is immutable, and every
@@ -52,26 +52,26 @@ public class SupportCase
     /// cheap, takes no arguments, has no side effects, and just describes the
     /// case. Escalation wins over raw severity.
     /// </summary>
-    public CasePriority Priority
+    public CasePriorityLevel Priority
     {
         get
         {
             if (IsExecutiveEscalation)
             {
-                return CasePriority.Critical;
+                return CasePriorityLevel.Critical;
             }
 
             if (Severity >= 5)
             {
-                return CasePriority.Critical;
+                return CasePriorityLevel.Critical;
             }
 
             if (Severity >= 3)
             {
-                return CasePriority.High;
+                return CasePriorityLevel.High;
             }
 
-            return CasePriority.Normal;
+            return CasePriorityLevel.Normal;
         }
     }
 

@@ -8,53 +8,72 @@ is a small, runnable project, growing toward a full ASP.NET Core case-management
 
 ## Projects
 
-### CasePriorityApp (Day 1)
-A console app that models support cases, filters to the open ones, sorts them by
-severity (highest first), and computes a priority label — including an
-executive-escalation rule that forces `Critical` regardless of severity.
+| Project | Type | Role |
+|---------|------|------|
+| **`CasePriority.Core`** | class library | Reusable domain, repository, and service — the heart, referenced by everything |
+| **`CasePriority.Api`** | ASP.NET Core Web API | Controller-based HTTP API over the Core service |
+| **`CasePriorityApp`** | console app | Composition root that demonstrates Core as a console program |
+| **`CasePriorityApp.Tests`** | xUnit | Unit tests for the domain, repository, and service |
+| **`CasePriority.Api.Tests`** | xUnit | Integration tests driving the API through `WebApplicationFactory` |
 
-Practices: C# classes, auto-properties, `List<T>`, LINQ (`Where` / `OrderByDescending`),
-lambdas, `foreach`, string interpolation, and conditional logic.
+## Architecture (Day 5)
 
-Run it:
+The domain/repository/service layers live in a reusable class library; the API and
+the console app are two front ends that assemble the same Core the same way.
+
+```
+HTTP client                       console
+    │                                │
+    ▼                                ▼
+CasesController                 Program.cs (composition root)
+    └───────────────┬────────────────┘
+                    ▼
+             CaseService              coordinates use cases (create, query, ...)
+                    │
+                    ▼
+             ICaseRepository          persistence contract the service depends on
+                    │
+                    ▼
+          InMemoryCaseRepository      ConcurrentDictionary-backed storage (thread-safe singleton)
+                    │
+                    ▼
+             SupportCase              domain object — guards its own state & invariants
+```
+
+- **`SupportCase`** owns the rules about one case (validation, guarded transitions, computed `Priority`).
+- **`ICaseRepository`** describes persistence operations without a storage mechanism.
+- **`InMemoryCaseRepository`** uses a `ConcurrentDictionary`, making its **collection** operations safe across concurrent requests, so it can be a shared singleton; a database-backed one can replace it later. (Coordination for concurrent mutation of an individual `SupportCase` is deferred until mutation endpoints are introduced — Day 5 exposes only GET and POST.)
+- **`CaseService`** coordinates use cases and depends on `ICaseRepository` (constructor injection), never the concrete repository.
+- **`CasesController`** does only HTTP work — validated request DTOs in, `CaseResponse` DTOs out, REST status codes — and delegates business work to the service. Domain/service exceptions map to Problem Details centrally (`ApiExceptionHandler`): `KeyNotFoundException` → 404, `InvalidOperationException` → 409, `ArgumentException` → 400.
+
+### Run the API
 
 ```bash
-cd CasePriorityApp
-dotnet run
+dotnet run --project CasePriority.Api        # http://localhost:5075
 ```
 
-## Architecture (Day 4)
+Then use `CasePriority.Api/CasePriority.Api.http`, or:
 
-The app is layered so each piece has one job, and dependencies point at
-abstractions rather than concrete types:
-
-```
-Program.cs            composition root — picks and wires the concrete objects
-    │
-    ▼
-CaseService           coordinates use cases (create, close, escalate, query)
-    │
-    ▼
-ICaseRepository       persistence contract the service depends on
-    │
-    ▼
-InMemoryCaseRepository   current storage (dictionary keyed by case number)
-    │
-    ▼
-SupportCase           domain object — guards its own state & invariants
+```bash
+curl -i -X POST http://localhost:5075/api/cases \
+  -H "Content-Type: application/json" \
+  -d '{"caseNumber":"WEB-0001","subject":"User cannot access the portal","severity":3}'
 ```
 
-- **`SupportCase`** owns the rules about one case (validation, guarded state transitions, computed `Priority`).
-- **`ICaseRepository`** describes persistence operations without a storage mechanism.
-- **`InMemoryCaseRepository`** provides the current dictionary-backed storage; a database-backed one can replace it later without touching the service.
-- **`CaseService`** coordinates application use cases and depends on `ICaseRepository` (constructor injection), never on the concrete repository.
-- **`Program.cs`** is only the composition root plus a demonstration — it holds no case list and does no filtering, lookup, or state mutation itself.
+### Run the console demo
 
-`CaseService → ICaseRepository` is the key direction: the service knows *what* storage must do, not *how* it does it. ASP.NET Core will later perform this same constructor injection through its built-in container.
+```bash
+dotnet run --project CasePriorityApp
+```
 
 ## Testing
 
-xUnit tests live in `CasePriorityApp.Tests`. Run the whole solution:
+- **`CasePriorityApp.Tests`** — unit tests for the domain, repository, and service.
+- **`CasePriority.Api.Tests`** — integration tests that boot the API in-memory with
+  `WebApplicationFactory` and exercise routing, model binding, DI, serialization,
+  middleware, and HTTP status codes end to end.
+
+Run the whole solution:
 
 ```bash
 dotnet test

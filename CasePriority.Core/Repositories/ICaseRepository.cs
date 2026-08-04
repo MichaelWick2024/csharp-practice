@@ -1,4 +1,6 @@
-namespace CasePriorityApp.Repositories;
+using CasePriority.Core.Domain;
+
+namespace CasePriority.Core.Repositories;
 
 /// <summary>
 /// Persistence contract for support cases. The service depends on this
