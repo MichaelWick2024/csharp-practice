@@ -39,10 +39,12 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Require the SQL connection string
+      - name: Require the SQL password secret
+        env:
+          MSSQL_SA_PASSWORD: ${{ secrets.MSSQL_SA_PASSWORD }}
         run: |
-          if [ -z "${ConnectionStrings__CasePriority}" ]; then
-            echo "::error::ConnectionStrings__CasePriority is empty (is the MSSQL_SA_PASSWORD secret set?)."
+          if [ -z "${MSSQL_SA_PASSWORD}" ]; then
+            echo "::error::MSSQL_SA_PASSWORD is not configured (repo secret)."
             exit 1
           fi
 

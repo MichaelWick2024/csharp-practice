@@ -48,6 +48,34 @@ public class SupportCaseTests
         Assert.Equal("subject", ex.ParamName);
     }
 
+    [Fact]
+    public void Constructor_CaseNumberTooLong_Throws()
+    {
+        var tooLong = new string('X', SupportCase.MaxCaseNumberLength + 1);
+        var ex = Assert.Throws<ArgumentException>(
+            () => new SupportCase(tooLong, "Subject", severity: 3));
+        Assert.Equal("caseNumber", ex.ParamName);
+    }
+
+    [Fact]
+    public void Constructor_SubjectTooLong_Throws()
+    {
+        var tooLong = new string('X', SupportCase.MaxSubjectLength + 1);
+        var ex = Assert.Throws<ArgumentException>(
+            () => new SupportCase("0001", tooLong, severity: 3));
+        Assert.Equal("subject", ex.ParamName);
+    }
+
+    [Fact]
+    public void Constructor_MaxLengths_AreAllowed()
+    {
+        var caseNumber = new string('X', SupportCase.MaxCaseNumberLength);
+        var subject = new string('Y', SupportCase.MaxSubjectLength);
+        var c = new SupportCase(caseNumber, subject, severity: 3);
+        Assert.Equal(caseNumber, c.CaseNumber);
+        Assert.Equal(subject, c.Subject);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(6)]

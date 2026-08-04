@@ -146,6 +146,33 @@ public sealed class EfCaseRepositoryTests
     }
 
     [SkippableFact]
+    public async Task NoOp_WithConcurrentDatabaseChange_ThrowsConcurrency()
+    {
+        Skip.IfNot(SqlServerSupport.Available, SqlServerSupport.SkipReason);
+        var caseNumber = SqlServerSupport.NewCaseNumber();
+        await Seed(caseNumber, severity: 3);
+
+        await using var contextA = SqlServerSupport.NewDbContext();
+        await using var contextB = SqlServerSupport.NewDbContext();
+        var repoA = new EfCaseRepository(contextA);
+        var repoB = new EfCaseRepository(contextB);
+
+        var caseA = await repoA.GetByCaseNumberAsync(caseNumber);
+        var caseB = await repoB.GetByCaseNumberAsync(caseNumber);
+
+        caseA!.ChangeSeverity(3, expectedVersion: 1); // no-op (severity already 3)
+
+        caseB!.ChangeSeverity(4, expectedVersion: 1);
+        await repoB.SaveChangesAsync(); // database is now version 2
+
+        // A's no-op must still be checked against the current version -> 412.
+        var exception = await Assert.ThrowsAsync<CaseConcurrencyException>(
+            () => repoA.SaveChangesAsync());
+        Assert.Equal(1, exception.ExpectedVersion);
+        Assert.Equal(2, exception.ActualVersion);
+    }
+
+    [SkippableFact]
     public async Task TwoContexts_SameVersion_ExactlyOneUpdateWins()
     {
         Skip.IfNot(SqlServerSupport.Available, SqlServerSupport.SkipReason);

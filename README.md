@@ -18,11 +18,12 @@ is a small, runnable project, growing toward a full ASP.NET Core case-management
 | **`CasePriority.Api.Tests`** | xUnit | API tests via `WebApplicationFactory` (in-memory swap) + SQL-backed E2E (CI) |
 | **`CasePriority.Infrastructure.Tests`** | xUnit | Real SQL Server integration tests (mapping, persistence, DB concurrency) — CI |
 
-## Architecture (Day 6)
+## Architecture (Day 7)
 
 The domain/repository/service layers live in a reusable class library; the API and
-the console app are two front ends that assemble the same Core the same way. Mutations
-use **optimistic concurrency** — each case has a version, surfaced as an HTTP ETag.
+the console app are two front ends that assemble the same Core. Mutations use
+**optimistic concurrency** — each case has a version, surfaced as an HTTP ETag —
+now enforced at the database via an EF Core concurrency token.
 
 ```
 HTTP If-Match                     console
@@ -33,19 +34,25 @@ CasesController                 Program.cs (composition root)
     └───────────────┬────────────────┘
                     ▼
              CaseService              coordinates use cases; mutations require a version
-                    │
                     ▼
-             ICaseRepository          persistence contract the service depends on
+      ICaseRepository + IUnitOfWork   persistence + commit contracts the service depends on
                     │
-                    ▼
-          InMemoryCaseRepository      ConcurrentDictionary — collection-safe singleton
-                    │
-                    ▼
+        ┌───────────┴─────────────────────────────┐
+        ▼                                          ▼
+  EfCaseRepository → CasePriorityDbContext    InMemoryCaseRepository
+        → SQL Server                          (ConcurrentDictionary)
+     production API                           console + fast tests
+        │                                          │
+        └───────────────┬──────────────────────────┘
+                        ▼
              SupportCase              per-case lock: atomic version-check + mutation + bump
-                    │
-                    ▼
+                        ▼
           SupportCaseSnapshot         immutable view returned by service → CaseResponse + ETag
 ```
+
+> The production API talks to **SQL Server via EF Core** and needs a reachable
+> database + `ConnectionStrings:CasePriority` (see *Persistence* below). The
+> console app and the fast tests use the in-memory repository.
 
 - **`SupportCase`** owns the rules about one case and a per-case `Lock` + `Version`. Every mutation runs the expected-version check, the domain transition, and the version bump **inside one critical section**, then returns an immutable `SupportCaseSnapshot`. The version increments only when the representation actually changes.
 - **`ICaseRepository`** describes persistence operations without a storage mechanism.

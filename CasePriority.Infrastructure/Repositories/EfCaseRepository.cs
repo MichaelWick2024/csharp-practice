@@ -52,6 +52,8 @@ public sealed class EfCaseRepository : ICaseRepository, IUnitOfWork
 
     public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        ForceConcurrencyCheckOnUnchangedCases();
+
         try
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
@@ -69,6 +71,23 @@ public sealed class EfCaseRepository : ICaseRepository, IUnitOfWork
                 .FirstOrDefault() ?? "unknown";
 
             throw new InvalidOperationException($"Case {caseNumber} already exists.", exception);
+        }
+    }
+
+    // A no-op mutation (e.g. re-setting the same severity) leaves the entity
+    // Unchanged, so EF would issue no UPDATE and skip the concurrency-token
+    // check — letting a stale If-Match slip through as a false 200. Force the
+    // check by marking Version modified (its value is unchanged), so EF still
+    // emits UPDATE ... SET Version = @v WHERE Version = @original.
+    private void ForceConcurrencyCheckOnUnchangedCases()
+    {
+        var unchanged = _dbContext.ChangeTracker
+            .Entries<SupportCase>()
+            .Where(entry => entry.State == EntityState.Unchanged);
+
+        foreach (var entry in unchanged)
+        {
+            entry.Property(nameof(SupportCase.Version)).IsModified = true;
         }
     }
 

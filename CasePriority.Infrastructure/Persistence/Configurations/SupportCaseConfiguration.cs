@@ -23,7 +23,7 @@ public sealed class SupportCaseConfiguration : IEntityTypeConfiguration<SupportC
         builder.HasKey(supportCase => supportCase.CaseNumber);
 
         builder.Property(supportCase => supportCase.CaseNumber)
-            .HasMaxLength(20)
+            .HasMaxLength(SupportCase.MaxCaseNumberLength)
             .IsRequired()
             .ValueGeneratedNever()
             // Case-insensitive collation preserves "ABC-1" == "abc-1" and allows
@@ -31,7 +31,7 @@ public sealed class SupportCaseConfiguration : IEntityTypeConfiguration<SupportC
             .UseCollation("SQL_Latin1_General_CP1_CI_AS");
 
         builder.Property(supportCase => supportCase.Subject)
-            .HasMaxLength(200)
+            .HasMaxLength(SupportCase.MaxSubjectLength)
             .IsRequired();
 
         builder.Property(supportCase => supportCase.Severity)
