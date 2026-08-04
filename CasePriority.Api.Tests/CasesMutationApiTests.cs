@@ -13,14 +13,14 @@ namespace CasePriority.Api.Tests;
 /// Integration tests for the Day 6 mutation endpoints and optimistic
 /// concurrency (ETag / If-Match), driven through the full HTTP pipeline.
 /// </summary>
-public sealed class CasesMutationApiTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class CasesMutationApiTests : IClassFixture<InMemoryApiFactory>
 {
     private readonly HttpClient _client;
 
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
 
-    public CasesMutationApiTests(WebApplicationFactory<Program> factory)
+    public CasesMutationApiTests(InMemoryApiFactory factory)
     {
         _client = factory.CreateClient();
     }

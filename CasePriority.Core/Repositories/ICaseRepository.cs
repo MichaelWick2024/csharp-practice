@@ -3,21 +3,15 @@ using CasePriority.Core.Domain;
 namespace CasePriority.Core.Repositories;
 
 /// <summary>
-/// Persistence contract for support cases. The service depends on this
-/// abstraction, so storage can change from in-memory to a database later
-/// without rewriting the service.
+/// Persistence contract for support cases. Queries are asynchronous (a real
+/// database is I/O); <see cref="Add"/> stays synchronous because it only stages
+/// an entity — the database write happens in <see cref="IUnitOfWork.SaveChangesAsync"/>.
 /// </summary>
 public interface ICaseRepository
 {
-    /// <summary>
-    /// Returns a snapshot of all stored cases. Structural changes to the
-    /// returned collection do not affect the repository.
-    /// </summary>
-    IReadOnlyList<SupportCase> GetAll();
+    Task<IReadOnlyList<SupportCase>> GetAllAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>The matching case, or <c>null</c> if none exists.</summary>
-    SupportCase? GetByCaseNumber(string caseNumber);
+    Task<SupportCase?> GetByCaseNumberAsync(string caseNumber, CancellationToken cancellationToken = default);
 
-    /// <summary>Stores a new case. Implementations reject duplicates.</summary>
     void Add(SupportCase supportCase);
 }

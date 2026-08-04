@@ -3,6 +3,9 @@ using CasePriority.Api.ErrorHandling;
 using CasePriority.Core.Domain;
 using CasePriority.Core.Repositories;
 using CasePriority.Core.Services;
+using CasePriority.Infrastructure.Persistence;
+using CasePriority.Infrastructure.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -42,10 +45,24 @@ builder.Services.AddOpenApi(options =>
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
-// One shared, thread-safe repository across requests (so POSTed cases persist
-// for later GETs). Scoped service, created once per request, coordinates
-// against that shared repository.
-builder.Services.AddSingleton<ICaseRepository, InMemoryCaseRepository>();
+// EF Core / SQL Server persistence. Fail fast if the connection string is
+// missing (never fall back to a default). Tests override this registration with
+// the in-memory repository; migrations are applied out-of-band (CLI/CI), never
+// automatically at startup.
+var connectionString =
+    builder.Configuration.GetConnectionString("CasePriority")
+    ?? throw new InvalidOperationException("Connection string 'CasePriority' is required.");
+
+builder.Services.AddDbContext<CasePriorityDbContext>(options =>
+{
+    options.UseSqlServer(connectionString, sqlServer => sqlServer.EnableRetryOnFailure());
+});
+
+// Register the concrete EF repository once and resolve BOTH interfaces from the
+// same scoped instance, so the repository and unit of work share one DbContext.
+builder.Services.AddScoped<EfCaseRepository>();
+builder.Services.AddScoped<ICaseRepository>(sp => sp.GetRequiredService<EfCaseRepository>());
+builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<EfCaseRepository>());
 builder.Services.AddScoped<CaseService>();
 
 var app = builder.Build();

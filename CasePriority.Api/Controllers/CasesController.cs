@@ -11,6 +11,8 @@ namespace CasePriority.Api.Controllers;
 /// HTTP surface for cases. Reads/writes go through <see cref="CaseService"/>;
 /// the controller only does HTTP work: DTO mapping, status codes, and the
 /// ETag / If-Match conditional-request plumbing for optimistic concurrency.
+/// Actions are async and flow the request's <see cref="CancellationToken"/>
+/// down to the database.
 /// </summary>
 [ApiController]
 [Route("api/cases")]
@@ -26,23 +28,19 @@ public sealed class CasesController : ControllerBase
 
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<CaseResponse>), StatusCodes.Status200OK)]
-    public ActionResult<IReadOnlyList<CaseResponse>> GetAll()
+    public async Task<ActionResult<IReadOnlyList<CaseResponse>>> GetAll(CancellationToken cancellationToken)
     {
-        // A collection response doesn't carry a single ETag.
-        var response = _caseService
-            .GetAllCases()
-            .Select(CaseResponse.FromSnapshot)
-            .ToList();
-
-        return Ok(response);
+        var cases = await _caseService.GetAllCasesAsync(cancellationToken);
+        return Ok(cases.Select(CaseResponse.FromSnapshot).ToList());
     }
 
     [HttpGet("{caseNumber}")]
     [ProducesResponseType(typeof(CaseResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public ActionResult<CaseResponse> GetByCaseNumber(string caseNumber)
+    public async Task<ActionResult<CaseResponse>> GetByCaseNumber(
+        string caseNumber, CancellationToken cancellationToken)
     {
-        var snapshot = _caseService.GetCaseByNumber(caseNumber);
+        var snapshot = await _caseService.GetCaseByNumberAsync(caseNumber, cancellationToken);
 
         Response.Headers[HeaderNames.ETag] = EntityTagVersion.Format(snapshot.Version);
         return Ok(CaseResponse.FromSnapshot(snapshot));
@@ -52,12 +50,11 @@ public sealed class CasesController : ControllerBase
     [ProducesResponseType(typeof(CaseResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public ActionResult<CaseResponse> Create(CreateCaseRequest request)
+    public async Task<ActionResult<CaseResponse>> Create(
+        CreateCaseRequest request, CancellationToken cancellationToken)
     {
-        var created = _caseService.CreateCase(
-            request.CaseNumber,
-            request.Subject,
-            request.Severity);
+        var created = await _caseService.CreateCaseAsync(
+            request.CaseNumber, request.Subject, request.Severity, cancellationToken);
 
         Response.Headers[HeaderNames.ETag] = EntityTagVersion.Format(created.Version);
 
@@ -74,12 +71,13 @@ public sealed class CasesController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status412PreconditionFailed)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status428PreconditionRequired)]
-    public ActionResult<CaseResponse> Close(
+    public async Task<ActionResult<CaseResponse>> Close(
         string caseNumber,
-        [FromHeader(Name = "If-Match")] string? ifMatch)
+        [FromHeader(Name = "If-Match")] string? ifMatch,
+        CancellationToken cancellationToken)
     {
         var expectedVersion = EntityTagVersion.ParseRequired(ifMatch);
-        var updated = _caseService.CloseCase(caseNumber, expectedVersion);
+        var updated = await _caseService.CloseCaseAsync(caseNumber, expectedVersion, cancellationToken);
         return Updated(updated);
     }
 
@@ -90,12 +88,13 @@ public sealed class CasesController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status412PreconditionFailed)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status428PreconditionRequired)]
-    public ActionResult<CaseResponse> Reopen(
+    public async Task<ActionResult<CaseResponse>> Reopen(
         string caseNumber,
-        [FromHeader(Name = "If-Match")] string? ifMatch)
+        [FromHeader(Name = "If-Match")] string? ifMatch,
+        CancellationToken cancellationToken)
     {
         var expectedVersion = EntityTagVersion.ParseRequired(ifMatch);
-        var updated = _caseService.ReopenCase(caseNumber, expectedVersion);
+        var updated = await _caseService.ReopenCaseAsync(caseNumber, expectedVersion, cancellationToken);
         return Updated(updated);
     }
 
@@ -106,12 +105,13 @@ public sealed class CasesController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status412PreconditionFailed)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status428PreconditionRequired)]
-    public ActionResult<CaseResponse> Escalate(
+    public async Task<ActionResult<CaseResponse>> Escalate(
         string caseNumber,
-        [FromHeader(Name = "If-Match")] string? ifMatch)
+        [FromHeader(Name = "If-Match")] string? ifMatch,
+        CancellationToken cancellationToken)
     {
         var expectedVersion = EntityTagVersion.ParseRequired(ifMatch);
-        var updated = _caseService.EscalateCase(caseNumber, expectedVersion);
+        var updated = await _caseService.EscalateCaseAsync(caseNumber, expectedVersion, cancellationToken);
         return Updated(updated);
     }
 
@@ -121,13 +121,15 @@ public sealed class CasesController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status412PreconditionFailed)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status428PreconditionRequired)]
-    public ActionResult<CaseResponse> ChangeSeverity(
+    public async Task<ActionResult<CaseResponse>> ChangeSeverity(
         string caseNumber,
         ChangeSeverityRequest request,
-        [FromHeader(Name = "If-Match")] string? ifMatch)
+        [FromHeader(Name = "If-Match")] string? ifMatch,
+        CancellationToken cancellationToken)
     {
         var expectedVersion = EntityTagVersion.ParseRequired(ifMatch);
-        var updated = _caseService.ChangeCaseSeverity(caseNumber, request.Severity, expectedVersion);
+        var updated = await _caseService.ChangeCaseSeverityAsync(
+            caseNumber, request.Severity, expectedVersion, cancellationToken);
         return Updated(updated);
     }
 

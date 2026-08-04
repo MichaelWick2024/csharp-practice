@@ -14,6 +14,22 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
+    # x64 Linux runner — the only officially supported host for SQL Server
+    # container images. The SA password comes from a repo secret, never the repo.
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: ${{ secrets.MSSQL_SA_PASSWORD }}
+        ports:
+          - 1433:1433
+
+    env:
+      # Test-only connection string; the password is injected from the secret.
+      ConnectionStrings__CasePriority: >-
+        Server=localhost,1433;Database=CasePriorityCi;User Id=sa;Password=${{ secrets.MSSQL_SA_PASSWORD }};Encrypt=True;TrustServerCertificate=True
+
     steps:
       - name: Check out the code
         uses: actions/checkout@v7
@@ -23,11 +39,34 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Require the SQL connection string
+        run: |
+          if [ -z "${ConnectionStrings__CasePriority}" ]; then
+            echo "::error::ConnectionStrings__CasePriority is empty (is the MSSQL_SA_PASSWORD secret set?)."
+            exit 1
+          fi
+
       - name: Restore dependencies
         run: dotnet restore csharp-practice.slnx
 
       - name: Build (no restore)
         run: dotnet build csharp-practice.slnx --configuration Release --no-restore
 
-      - name: Test (no build)
+      - name: Apply EF migrations to a clean CI database (waits for SQL to be ready)
+        run: |
+          dotnet tool restore
+          for attempt in $(seq 1 30); do
+            if dotnet ef database update \
+                 --project CasePriority.Infrastructure \
+                 --startup-project CasePriority.Api; then
+              echo "Migrations applied."
+              exit 0
+            fi
+            echo "SQL Server not ready yet (attempt ${attempt}); retrying in 5s..."
+            sleep 5
+          done
+          echo "::error::SQL Server did not become ready in time."
+          exit 1
+
+      - name: Test (no build) — SQL integration tests run here
         run: dotnet test csharp-practice.slnx --configuration Release --no-build --verbosity normal

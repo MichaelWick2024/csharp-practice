@@ -14,7 +14,7 @@ namespace CasePriority.Api.Tests;
 /// and middleware are all exercised together. The repository is a shared
 /// singleton, so tests use unique case numbers instead of asserting counts.
 /// </summary>
-public sealed class CasesApiTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class CasesApiTests : IClassFixture<InMemoryApiFactory>
 {
     private readonly HttpClient _client;
 
@@ -23,7 +23,7 @@ public sealed class CasesApiTests : IClassFixture<WebApplicationFactory<Program>
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
 
-    public CasesApiTests(WebApplicationFactory<Program> factory)
+    public CasesApiTests(InMemoryApiFactory factory)
     {
         _client = factory.CreateClient();
     }
