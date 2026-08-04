@@ -80,19 +80,38 @@ Every `PATCH` needs `If-Match: "<version>"`. Missing → **428**, malformed → 
 dotnet run --project CasePriority.Api        # http://localhost:5075
 ```
 
+The API requires a bearer token (all case endpoints are protected). Generate one
+locally (stored in user-secrets, never committed):
+
+```bash
+TOKEN=$(dotnet user-jwts create --project CasePriority.Api --role CaseManager --valid-for 1h --output token)
+```
+
 Then use `CasePriority.Api/CasePriority.Api.http`, or:
 
 ```bash
-# Create (returns ETag: "1")
+# No token -> 401 Unauthorized + WWW-Authenticate: Bearer
+curl -i http://localhost:5075/api/cases
+
+# Create (CaseManager, returns ETag: "1")
 curl -i -X POST http://localhost:5075/api/cases \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"caseNumber":"WEB-0001","subject":"User cannot access the portal","severity":3}'
 
 # Close using the current version (returns ETag: "2")
-curl -i -X PATCH http://localhost:5075/api/cases/WEB-0001/close -H 'If-Match: "1"'
+curl -i -X PATCH http://localhost:5075/api/cases/WEB-0001/close \
+  -H "Authorization: Bearer $TOKEN" -H 'If-Match: "1"'
 
 # Re-using the stale version now returns 412 Precondition Failed
-curl -i -X PATCH http://localhost:5075/api/cases/WEB-0001/escalate -H 'If-Match: "1"'
+curl -i -X PATCH http://localhost:5075/api/cases/WEB-0001/escalate \
+  -H "Authorization: Bearer $TOKEN" -H 'If-Match: "1"'
+
+# A Viewer token attempting to create -> 403 Forbidden
+VIEWER=$(dotnet user-jwts create --project CasePriority.Api --role Viewer --valid-for 1h --output token)
+curl -i -X POST http://localhost:5075/api/cases \
+  -H "Authorization: Bearer $VIEWER" -H "Content-Type: application/json" \
+  -d '{"caseNumber":"WEB-0002","subject":"nope","severity":3}'
 ```
 
 ### Run the console demo
@@ -134,6 +153,34 @@ The API is built to configure, monitor, and troubleshoot:
 - **Health checks** — `GET /health/live` (is the process up? no dependency probe)
   and `GET /health/ready` (real SQL Server connectivity → 503 when unreachable).
   Health responses never expose the connection string.
+
+## Security (Day 9)
+
+The API **validates** JWT bearer tokens — signature, issuer, audience, and
+expiration — but never issues production tokens or accepts passwords. Local dev
+tokens come from `dotnet user-jwts`; a real deployment would use an OIDC/OAuth
+provider (e.g. Entra ID).
+
+| Role | Read | Create / modify |
+|------|------|-----------------|
+| `Viewer` | ✅ | ❌ |
+| `CaseManager` | ✅ | ✅ |
+| `Administrator` | ✅ | ✅ |
+
+- No/invalid token → **401** with `WWW-Authenticate: Bearer`; valid token but
+  insufficient role → **403**. Both are Problem Details carrying the Day 8
+  correlation `traceId`, and never leak token/validation details.
+- Policies: `Cases.Read` (GETs) and `Cases.Manage` (POST + PATCH), enforced with
+  `[Authorize(Policy = …)]`. Roles come from the token's `role` claims.
+- `/health/live`, `/health/ready`, and (in Development) `/openapi/v1.json` are
+  explicitly **anonymous**. The OpenAPI document defines the Bearer scheme and
+  marks every case operation as requiring it.
+
+```bash
+# Local development tokens (stored in user-secrets, never the repo):
+dotnet user-jwts create --project CasePriority.Api --role Administrator --valid-for 1h
+curl -i http://localhost:5075/api/cases -H "Authorization: Bearer <TOKEN>"
+```
 
 ## Testing
 

@@ -3,7 +3,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CasePriority.Api.Contracts;
+using CasePriority.Api.Tests.Security;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 
 namespace CasePriority.Api.Tests;
 
@@ -34,9 +36,9 @@ public sealed class SqlBackedApiTests
         var caseNumber = NewCaseNumber();
 
         // Host 1 creates the case, then is disposed — the "restart".
-        await using (var host1 = new WebApplicationFactory<Program>())
+        await using (var host1 = NewSqlHost())
         {
-            var client1 = host1.CreateClient();
+            var client1 = host1.CreateAuthenticatedClient();
             var create = await client1.PostAsJsonAsync(
                 "/api/cases", new { caseNumber, subject = "persist across restart", severity = 3 });
 
@@ -45,8 +47,8 @@ public sealed class SqlBackedApiTests
         }
 
         // Host 2 is a fresh application over the same database.
-        await using var host2 = new WebApplicationFactory<Program>();
-        var get = await host2.CreateClient().GetAsync($"/api/cases/{caseNumber}");
+        await using var host2 = NewSqlHost();
+        var get = await host2.CreateAuthenticatedClient().GetAsync($"/api/cases/{caseNumber}");
 
         Assert.Equal(HttpStatusCode.OK, get.StatusCode);
         var body = await get.Content.ReadFromJsonAsync<CaseResponse>(JsonOptions);
@@ -60,9 +62,9 @@ public sealed class SqlBackedApiTests
         Skip.IfNot(Available, SkipReason);
         var caseNumber = NewCaseNumber();
 
-        await using (var host1 = new WebApplicationFactory<Program>())
+        await using (var host1 = NewSqlHost())
         {
-            var client = host1.CreateClient();
+            var client = host1.CreateAuthenticatedClient();
             await client.PostAsJsonAsync("/api/cases", new { caseNumber, subject = "x", severity = 3 });
 
             var close = await client.SendAsync(Patch($"/api/cases/{caseNumber}/close", "\"1\""));
@@ -70,8 +72,8 @@ public sealed class SqlBackedApiTests
             Assert.Equal("\"2\"", close.Headers.ETag?.Tag);
         }
 
-        await using var host2 = new WebApplicationFactory<Program>();
-        var body = await (await host2.CreateClient().GetAsync($"/api/cases/{caseNumber}"))
+        await using var host2 = NewSqlHost();
+        var body = await (await host2.CreateAuthenticatedClient().GetAsync($"/api/cases/{caseNumber}"))
             .Content.ReadFromJsonAsync<CaseResponse>(JsonOptions);
 
         Assert.False(body!.IsOpen);
@@ -84,8 +86,8 @@ public sealed class SqlBackedApiTests
         Skip.IfNot(Available, SkipReason);
         var caseNumber = NewCaseNumber();
 
-        await using var host = new WebApplicationFactory<Program>();
-        var client = host.CreateClient();
+        await using var host = NewSqlHost();
+        var client = host.CreateAuthenticatedClient();
         await client.PostAsJsonAsync("/api/cases", new { caseNumber, subject = "x", severity = 3 });
 
         var first = Patch($"/api/cases/{caseNumber}/severity", "\"1\"", new { severity = 4 });
@@ -103,6 +105,10 @@ public sealed class SqlBackedApiTests
         Assert.Equal(2, final!.Version);
         Assert.Contains(final.Severity, new[] { 4, 5 });
     }
+
+    private static WebApplicationFactory<Program> NewSqlHost() =>
+        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(TestJwtTokens.UseTestAuthentication));
 
     private static HttpRequestMessage Patch(string path, string ifMatch, object? body = null)
     {

@@ -7,6 +7,8 @@ using CasePriority.Core.Domain;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
 
+using CasePriority.Api.Tests.Security;
+
 namespace CasePriority.Api.Tests;
 
 /// <summary>
@@ -22,7 +24,7 @@ public sealed class CasesMutationApiTests : IClassFixture<InMemoryApiFactory>
 
     public CasesMutationApiTests(InMemoryApiFactory factory)
     {
-        _client = factory.CreateClient();
+        _client = factory.CreateAuthenticatedClient();
     }
 
     private static string NewCaseNumber() => $"MUT-{Guid.NewGuid():N}"[..16];

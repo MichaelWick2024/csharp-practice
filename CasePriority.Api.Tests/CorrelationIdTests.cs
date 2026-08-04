@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc;
 
+using CasePriority.Api.Tests.Security;
+
 namespace CasePriority.Api.Tests;
 
 /// <summary>
@@ -16,7 +18,7 @@ public sealed class CorrelationIdTests : IClassFixture<InMemoryApiFactory>
 
     public CorrelationIdTests(InMemoryApiFactory factory)
     {
-        _client = factory.CreateClient();
+        _client = factory.CreateAuthenticatedClient();
     }
 
     private async Task<HttpResponseMessage> SendGetAll(params (string Name, string Value)[] headers)

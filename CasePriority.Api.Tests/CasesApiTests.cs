@@ -6,6 +6,8 @@ using CasePriority.Api.Contracts;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
 
+using CasePriority.Api.Tests.Security;
+
 namespace CasePriority.Api.Tests;
 
 /// <summary>
@@ -25,7 +27,7 @@ public sealed class CasesApiTests : IClassFixture<InMemoryApiFactory>
 
     public CasesApiTests(InMemoryApiFactory factory)
     {
-        _client = factory.CreateClient();
+        _client = factory.CreateAuthenticatedClient();
     }
 
     // Unique but short enough to satisfy CreateCaseRequest's [StringLength(20)]:
