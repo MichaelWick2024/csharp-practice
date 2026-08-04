@@ -116,6 +116,25 @@ stale write updates zero rows → `DbUpdateConcurrencyException`, translated bac
 the same `CaseConcurrencyException` → **412**. Migrations are applied out-of-band
 (CLI/CI), never automatically at startup.
 
+## Operations (Day 8)
+
+The API is built to configure, monitor, and troubleshoot:
+
+- **Validated configuration** — `RequestTracing` settings are bound and validated
+  at **startup** (`AddOptionsWithValidateOnStart`); bad values stop the app rather
+  than surfacing per request.
+- **Correlation IDs** — `CorrelationIdMiddleware` honors a valid client
+  `X-Correlation-ID` or generates one, sets it as `TraceIdentifier`, echoes it on
+  the response, and opens a logging scope. Invalid IDs are replaced, never rejected.
+  The same value appears as `traceId` in every Problem Details, so a caller can
+  quote one value that also appears in the logs.
+- **Structured logging** — `CaseService` emits source-generated logs with stable
+  event IDs (1001–1007) and named fields (`CaseNumber`, `Version`, …), **only after
+  a successful commit**; no-ops log at Debug. Never logs the subject or secrets.
+- **Health checks** — `GET /health/live` (is the process up? no dependency probe)
+  and `GET /health/ready` (real SQL Server connectivity → 503 when unreachable).
+  Health responses never expose the connection string.
+
 ## Testing
 
 Two intentional layers:

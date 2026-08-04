@@ -75,6 +75,10 @@ public sealed class ApiExceptionHandler(
             Instance = httpContext.Request.Path
         };
 
+        // traceId (= the correlation ID) is attached centrally via
+        // AddProblemDetails' CustomizeProblemDetails, so it's consistent across
+        // every Problem Details, including validation 400s.
+
         // Give a stale-write client the machine-readable versions it needs to
         // re-fetch and reconcile.
         if (exception is CaseConcurrencyException concurrency)
