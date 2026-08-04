@@ -1,0 +1,34 @@
+@page
+@model CasePriority.Web.Pages.Account.DevLoginModel
+@{
+    ViewData["Title"] = "Developer sign-in";
+}
+
+<h1 class="h3 mb-3">Developer sign-in</h1>
+
+<div class="alert alert-warning" role="alert">
+    Development-only login. A real deployment would use an OIDC provider.
+</div>
+
+<form method="post" class="col-md-5">
+    <div asp-validation-summary="All" class="text-danger mb-2"></div>
+    <input type="hidden" asp-for="ReturnUrl" />
+
+    <div class="mb-3">
+        <label asp-for="Input.AccessCode" class="form-label">Access code</label>
+        <input asp-for="Input.AccessCode" type="password" class="form-control" autocomplete="off" />
+        <span asp-validation-for="Input.AccessCode" class="text-danger"></span>
+    </div>
+
+    <div class="mb-3">
+        <label asp-for="Input.Role" class="form-label">Role</label>
+        <select asp-for="Input.Role" class="form-select">
+            <option value="Viewer">Viewer (read only)</option>
+            <option value="CaseManager">CaseManager (read &amp; manage)</option>
+            <option value="Administrator">Administrator (read &amp; manage)</option>
+        </select>
+        <span asp-validation-for="Input.Role" class="text-danger"></span>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Sign in</button>
+</form>

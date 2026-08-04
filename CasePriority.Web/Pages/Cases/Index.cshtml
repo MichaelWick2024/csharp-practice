@@ -1,0 +1,65 @@
+@page
+@model CasePriority.Web.Pages.Cases.IndexModel
+@{
+    ViewData["Title"] = "Cases";
+}
+
+@functions {
+    static string PriorityBadge(string priority) => priority switch
+    {
+        "Critical" => "bg-danger",
+        "High" => "bg-warning text-dark",
+        _ => "bg-secondary",
+    };
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Cases</h1>
+    @if (User.IsInRole("CaseManager") || User.IsInRole("Administrator"))
+    {
+        <a class="btn btn-primary" asp-page="/Cases/Create">New case</a>
+    }
+</div>
+
+@if (Model.ErrorMessage is not null)
+{
+    <div class="alert alert-danger" role="alert">@Model.ErrorMessage</div>
+}
+
+<div class="mb-3">
+    <input id="case-filter" class="form-control" placeholder="Filter cases..." aria-label="Filter cases" />
+</div>
+
+<div class="table-responsive">
+    <table id="case-table" class="table table-striped align-middle">
+        <thead>
+            <tr>
+                <th scope="col">Case</th>
+                <th scope="col">Subject</th>
+                <th scope="col">Severity</th>
+                <th scope="col">Priority</th>
+                <th scope="col">Status</th>
+                <th scope="col">Escalated</th>
+                <th scope="col"></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var c in Model.Cases)
+            {
+                <tr>
+                    <td>@c.CaseNumber</td>
+                    <td>@c.Subject</td>
+                    <td>@c.Severity</td>
+                    <td><span class="badge @PriorityBadge(c.Priority)">@c.Priority</span></td>
+                    <td><span class="badge @(c.IsOpen ? "bg-success" : "bg-dark")">@(c.IsOpen ? "Open" : "Closed")</span></td>
+                    <td>@(c.IsExecutiveEscalation ? "Yes" : "No")</td>
+                    <td><a class="btn btn-sm btn-outline-secondary" asp-page="/Cases/Details" asp-route-caseNumber="@c.CaseNumber">Details</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    @if (Model.Cases.Count == 0 && Model.ErrorMessage is null)
+    {
+        <p class="text-muted">No cases yet.</p>
+    }
+</div>
