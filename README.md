@@ -135,6 +135,34 @@ The API is built to configure, monitor, and troubleshoot:
   and `GET /health/ready` (real SQL Server connectivity → 503 when unreachable).
   Health responses never expose the connection string.
 
+## Security (Day 9)
+
+The API **validates** JWT bearer tokens — signature, issuer, audience, and
+expiration — but never issues production tokens or accepts passwords. Local dev
+tokens come from `dotnet user-jwts`; a real deployment would use an OIDC/OAuth
+provider (e.g. Entra ID).
+
+| Role | Read | Create / modify |
+|------|------|-----------------|
+| `Viewer` | ✅ | ❌ |
+| `CaseManager` | ✅ | ✅ |
+| `Administrator` | ✅ | ✅ |
+
+- No/invalid token → **401** with `WWW-Authenticate: Bearer`; valid token but
+  insufficient role → **403**. Both are Problem Details carrying the Day 8
+  correlation `traceId`, and never leak token/validation details.
+- Policies: `Cases.Read` (GETs) and `Cases.Manage` (POST + PATCH), enforced with
+  `[Authorize(Policy = …)]`. Roles come from the token's `role` claims.
+- `/health/live`, `/health/ready`, and (in Development) `/openapi/v1.json` are
+  explicitly **anonymous**. The OpenAPI document defines the Bearer scheme and
+  marks every case operation as requiring it.
+
+```bash
+# Local development tokens (stored in user-secrets, never the repo):
+dotnet user-jwts create --project CasePriority.Api --role Administrator --valid-for 1h
+curl -i http://localhost:5075/api/cases -H "Authorization: Bearer <TOKEN>"
+```
+
 ## Testing
 
 Two intentional layers:

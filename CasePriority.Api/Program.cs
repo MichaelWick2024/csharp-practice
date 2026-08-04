@@ -3,12 +3,14 @@ using CasePriority.Api.Configuration;
 using CasePriority.Api.ErrorHandling;
 using CasePriority.Api.Health;
 using CasePriority.Api.Middleware;
+using CasePriority.Api.Security;
 using CasePriority.Core.Domain;
 using CasePriority.Core.Repositories;
 using CasePriority.Core.Services;
 using CasePriority.Infrastructure.Health;
 using CasePriority.Infrastructure.Persistence;
 using CasePriority.Infrastructure.Repositories;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -36,8 +38,35 @@ builder.Services
             new JsonStringEnumConverter<CasePriorityLevel>());
     });
 
+// Authentication: validate JWT bearer tokens (signature/issuer/audience/expiry).
+// The API never issues production tokens — validation parameters come from
+// configuration (dotnet user-jwts locally) or are overridden by tests.
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options => options.EventsType = typeof(BearerProblemDetailsEvents));
+
+builder.Services.AddScoped<BearerProblemDetailsEvents>();
+
+// Authorization policies (roles come from the token's role claims).
+builder.Services
+    .AddAuthorizationBuilder()
+    .AddPolicy(CasePolicies.ReadCases, policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireRole(CaseRoles.Viewer, CaseRoles.CaseManager, CaseRoles.Administrator);
+    })
+    .AddPolicy(CasePolicies.ManageCases, policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireRole(CaseRoles.CaseManager, CaseRoles.Administrator);
+    });
+
 builder.Services.AddOpenApi(options =>
 {
+    // Document the Bearer scheme and add a security requirement to protected ops.
+    options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+    options.AddOperationTransformer<AuthorizationOperationTransformer>();
+
     // The If-Match header is required for every mutation (missing -> 428). The
     // C# parameter stays nullable so our custom 428 fires instead of an
     // automatic 400 on a non-nullable binding failure — so mark it required in
@@ -101,28 +130,31 @@ builder.Services
 var app = builder.Build();
 
 // Correlation ID first, so every downstream log and error shares it.
+// Then: exception handling -> authentication (who?) -> authorization (may they?).
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.MapOpenApi().AllowAnonymous();
 }
 
-// Liveness: is the process up? (no dependency checks). Readiness: can we serve
-// the real workload? (SQL Server connectivity).
+// Health endpoints are explicitly anonymous — monitors don't carry tokens.
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {
     Predicate = _ => false,
     ResponseWriter = HealthResponseWriter.WriteAsync
-});
+}).AllowAnonymous();
 
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("ready"),
     ResponseWriter = HealthResponseWriter.WriteAsync
-});
+}).AllowAnonymous();
 
 app.MapControllers();
 

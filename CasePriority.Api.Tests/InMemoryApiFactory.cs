@@ -40,6 +40,9 @@ public sealed class InMemoryApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<InMemoryCaseRepository>();
             services.AddSingleton<ICaseRepository>(sp => sp.GetRequiredService<InMemoryCaseRepository>());
             services.AddSingleton<IUnitOfWork>(sp => sp.GetRequiredService<InMemoryCaseRepository>());
+
+            // Real JWT bearer handler, validating against the test signing key.
+            Security.TestJwtTokens.UseTestAuthentication(services);
         });
     }
 }

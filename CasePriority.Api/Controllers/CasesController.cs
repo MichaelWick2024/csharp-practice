@@ -1,7 +1,9 @@
 using CasePriority.Api.Contracts;
 using CasePriority.Api.Http;
+using CasePriority.Api.Security;
 using CasePriority.Core.Domain;
 using CasePriority.Core.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
 
@@ -26,16 +28,22 @@ public sealed class CasesController : ControllerBase
         _caseService = caseService;
     }
 
+    [Authorize(Policy = CasePolicies.ReadCases)]
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<CaseResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IReadOnlyList<CaseResponse>>> GetAll(CancellationToken cancellationToken)
     {
         var cases = await _caseService.GetAllCasesAsync(cancellationToken);
         return Ok(cases.Select(CaseResponse.FromSnapshot).ToList());
     }
 
+    [Authorize(Policy = CasePolicies.ReadCases)]
     [HttpGet("{caseNumber}")]
     [ProducesResponseType(typeof(CaseResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CaseResponse>> GetByCaseNumber(
         string caseNumber, CancellationToken cancellationToken)
@@ -46,9 +54,12 @@ public sealed class CasesController : ControllerBase
         return Ok(CaseResponse.FromSnapshot(snapshot));
     }
 
+    [Authorize(Policy = CasePolicies.ManageCases)]
     [HttpPost]
     [ProducesResponseType(typeof(CaseResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<CaseResponse>> Create(
         CreateCaseRequest request, CancellationToken cancellationToken)
@@ -64,8 +75,11 @@ public sealed class CasesController : ControllerBase
             CaseResponse.FromSnapshot(created));
     }
 
+    [Authorize(Policy = CasePolicies.ManageCases)]
     [HttpPatch("{caseNumber}/close")]
     [ProducesResponseType(typeof(CaseResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -81,8 +95,11 @@ public sealed class CasesController : ControllerBase
         return Updated(updated);
     }
 
+    [Authorize(Policy = CasePolicies.ManageCases)]
     [HttpPatch("{caseNumber}/reopen")]
     [ProducesResponseType(typeof(CaseResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -98,8 +115,11 @@ public sealed class CasesController : ControllerBase
         return Updated(updated);
     }
 
+    [Authorize(Policy = CasePolicies.ManageCases)]
     [HttpPatch("{caseNumber}/escalate")]
     [ProducesResponseType(typeof(CaseResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -115,8 +135,11 @@ public sealed class CasesController : ControllerBase
         return Updated(updated);
     }
 
+    [Authorize(Policy = CasePolicies.ManageCases)]
     [HttpPatch("{caseNumber}/severity")]
     [ProducesResponseType(typeof(CaseResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status412PreconditionFailed)]
